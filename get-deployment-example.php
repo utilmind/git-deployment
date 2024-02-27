@@ -1,18 +1,18 @@
 <?php
 /**
-    UtilMind Git deployment script example.
+    Git deployment script example by UtilMind.
 
     @see       https://github.com/utilmind/ The GitHub project
     @author    Oleksii Kuznietsov (utilmind) <utilmind@gmail.com>
 
     QUICK START:
-        1. Rename this script into your project name
+        1. Rename this script into your project name.
         2. Modify the configuration options below ($CONFIG), according to your environment. (Don't forget to specify unique 'secret'.)
         3. Upload this script to your serer and point the URL to this script as WebHook.
 
     IMPORTANT! You never need sudoer privileges when executing this script. You never need sudo to pull updates from Git.
-          ...if you think that you need it -- you're doing something wrong. ---------------------------------------------
-            Anyway, the web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
+        ...if you think that you need it -- you're doing something wrong.   ---------------------------------------------
+        Anyway, the web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
 
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
@@ -37,13 +37,11 @@ $CONFIG = [
 ];
 
 
-// -- MAIN CONFIG --
-// It's better to be exported as an environment variable or in a .env file.
-
 // -- SHOW ALL ERRORS
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+
 // -- No output buffering. Output immediately
 @ini_set('output_buffering', 0);
 @ini_set('zlib.output_compression', 0);
@@ -51,7 +49,7 @@ error_reporting(E_ALL);
 ob_implicit_flush(1);
 @ob_end_flush(); // it doesn't works (returns notice) on my local Windows PC, but required to start output without buffering
 set_time_limit(900); // +15 minutes for execution. (Extend later if required!)
-header('Content-type: text/plain');
+header('Content-type: text/plain'); // no HTML-formatting for output
 
 
 // -- FUNCTIONS --
