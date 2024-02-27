@@ -40,8 +40,8 @@ $CONFIG = [
     'remote_name' => 'origin',
     'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
 
-    'git_dir' => '/path/to/your/project', // + the /branch_name/ will be added automatically to this path
-    'target_dir' => '/home/builzspz/public_html', // should point to the root directory of your published project
+    'git_dir' => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
+    'target_dir' => '/path/to/published/project', // should point to the root directory of your published project
     'repo_username' => 'YOUR_USERNAME',
     'repo_name' => 'YOUR_REPOSITORY_NAME',
 ];
