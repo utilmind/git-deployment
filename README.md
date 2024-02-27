@@ -1,6 +1,6 @@
 # git-deployment
 
-UtilMind Git deployment script example.
+Git deployment script example by UtilMind
 
 #### QUICK START:
 1. Rename this script into your project name
