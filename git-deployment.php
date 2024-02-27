@@ -19,10 +19,9 @@
         Use `code-integrity-checker.php` as example to monitor your live code.
 
     IMPORTANT!
-        * You never need sudoer privileges when executing this script.   You never need sudo to pull updates from Git.
-          if you think that you need it -- you're doing something wrong. ---------------------------------------------
-          Anyway, the web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
-        * Do not accidentally publish /.git directory. Keep it outside of any public_html’s.
+        * -= You never need sudo to pull updates from Git. =- If you think that you need to be a sudoer to use this script -- you're
+          doing something wrong. The web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
+        * Do not accidentally publish /.git directory. Keep it outside of any public_html's.
 
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
