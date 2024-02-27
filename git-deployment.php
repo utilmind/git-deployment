@@ -110,7 +110,7 @@ function get_ip() {
 
     // If request forwarded via Proxy, there is can be multiple comma-separated addresses. And this can be in any value, even REMOTE_ADDR. Let's take only first.
     return $ip
-        ? (-1 !== ($p = strpos($ip, ','))
+        ? (false !== ($p = strpos($ip, ','))
             ? substr($ip, 0, $p)
             : $ip)
         : '0.0.0.0'; // It's '0:0:0:0:0:ffff:0:0' in IPv6, but this is impossible situation, so we don't care.
