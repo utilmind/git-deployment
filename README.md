@@ -1,6 +1,6 @@
 # git-deployment
 
-Git deployment script example by UtilMind
+Git deployment (and monitoring the code integrity) examples by UtilMind
 
 #### QUICK START:
 1. Rename this PHP-script into your project name
