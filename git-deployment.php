@@ -245,15 +245,14 @@ if ($CONFIG['is_test']) {
 
 
 // Starting the process (authentication was successful already)
-$log_name = $this_name.'-'.$branch; // base name w/o extension. (We assume that extension is .php or .php5 or something... 3-4 characters.) + branch name.
+if ($CONFIG['log_output']) {
+    $log_name = $this_name.'-'.$branch; // base name w/o extension. (We assume that extension is .php or .php5 or something... 3-4 characters.) + branch name.
+    @unlink(__DIR__."/$log_name.log"); // clearing previous log
+}
 
 exec('whoami', $whoami, $retval);
 print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user '$whoami[0]'...", 0, true);
 $start_time = microtime(1);
-
-if ($CONFIG['log_output']) {
-    @unlink(__DIR__."/$log_name.log"); // clearing previous log
-}
 
 chdir($git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch); // switching into Git directory
 
