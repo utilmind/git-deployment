@@ -12,8 +12,7 @@ If you did everything right, your web project will be automatically updated from
 The good practice is to use code integrity checker, to monitor the code and inform administrator about all possible modifications outside of the Git repository (inform about possible malicious code injections, hacks). Use `code-integrity-checker.php` as example to monitor your live code.
 
 #### IMPORTANT!
-* You never need sudoer privileges when executing this script. <b>You never need `sudo` to pull updates from Git.</b>
-If you think that you need it – you’re doing something wrong. Anyway, the web user should _NEVER_ have a super-privileges. Otherwise your web app is critically vulnerable.
+* <b>You never need `sudo` to pull updates from Git.</b> If you think that you need to be a sudoer to use this script – you’re doing something wrong. Anyway, the web user should _NEVER_ have a super-privileges. Otherwise your web app is critically vulnerable.
 * Do not accidentally publish `/.git` directory. Keep it outside of any `public_html`’s.
 
 #### CONTRIBUTORS to original branch:
