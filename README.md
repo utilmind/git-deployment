@@ -1,4 +1,4 @@
-# git-deployment
+# git-deployment and code-integrity-checker
 
 Git deployment (and monitoring the code integrity) examples by UtilMind
 
