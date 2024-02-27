@@ -5,7 +5,9 @@ Git deployment script example by UtilMind
 #### QUICK START:
 1. Rename this PHP-script into your project name
 2. Modify the configuration options below ($CONFIG), according to your environment. (Don't forget to specify unique 'secret'.)
-3. Upload this script to your serer and point the URL to this script as WebHook. (So your project will be automatically updated on every `git push`.)
+3. Upload this script to your serer and point the URL to this script as WebHook.
+
+If you did everything right, your web project will be automatically updated from Git on every `git push`.
 
 #### IMPORTANT!
 You never need sudoer privileges when executing this script. <b>You never need `sudo` to pull updates from Git.</b>
