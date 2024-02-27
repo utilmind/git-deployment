@@ -3,7 +3,7 @@
 Git deployment script example by UtilMind
 
 #### QUICK START:
-1. Rename this script into your project name
+1. Rename this PHP-script into your project name
 2. Modify the configuration options below ($CONFIG), according to your environment. (Don't forget to specify unique 'secret'.)
 3. Upload this script to your serer and point the URL to this script as WebHook.
 
