@@ -291,6 +291,9 @@ if (0 !== $retval) {
     }
 }
 
+// Go to the target directory to pull updates into it. Although we specifying the '--work-tree' option for 'pull', some Git versions seems ignoring this parameter.
+chdir($CONFIG['target_dir']);
+
 // Pull updates
 $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
 // Done
