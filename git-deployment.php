@@ -161,6 +161,14 @@ function exec_log($command) {
         $result_code = proc_close($proc);
     }
 
+    // no sense to output $result_code here, it's always 0 (success) here.
+    if (!empty($stderr)) { // Let's show errors first
+        print_log('<< '.$stderr);
+    }
+    if (!empty($stdout)) {
+        print_log($stdout);
+    }
+
     if (0 !== $result_code) { // 0 is okay
         if (127 === $result_code) {
             print_log("ERROR: '$command' can't be executed. Command not found or not installed. Exiting.", 500); // nothing to execute?
@@ -169,14 +177,6 @@ function exec_log($command) {
         if (!$stdout) {
             print_log("ERROR: '$command' not executed? Empty output. Return value: $result_code.", 500);
         }
-    }
-
-    // no sense to output $result_code here, it's always 0 (success) here.
-    if (!empty($stderr)) { // Let's show errors first
-        print_log('<< '.$stderr);
-    }
-    if (!empty($stdout)) {
-        print_log($stdout);
     }
 
     return $result_code;
@@ -252,7 +252,7 @@ print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as
 $start_time = microtime(1);
 
 if ($CONFIG['log_output']) {
-    @unlink(__DIR__."/$this_name.log"); // clearing previous log
+    @unlink(__DIR__."/$log_name.log"); // clearing previous log
 }
 
 chdir($git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch); // switching into Git directory
