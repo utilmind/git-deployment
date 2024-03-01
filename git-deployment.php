@@ -19,8 +19,10 @@
         Use `code-integrity-checker.php` as example to monitor your live code.
 
     IMPORTANT!
-        * -= You never need sudo to pull updates from Git. =- If you think that you need to be a sudoer to use this script -- you're
-          doing something wrong. The web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
+        * -= You never need sudo to pull updates from Git. =-
+          If you think that you need to be a sudoer to use this script -- you're doing something wrong.
+          The web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
+
         * Do not accidentally publish /.git directory. Keep it outside of any public_html's.
 
     CONTRIBUTORS to original branch:
@@ -34,7 +36,7 @@ $CONFIG = [
     'allow_init_new_git' => true, // allow to initialize new local .git repository, if 'git_dir' doesn't exists. (Find 'git_dir' option below.)
     'log_output' => true, // log file name is 'this_script_name.log'.
 
-    'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with mix of alphanumeric and special ASCII characters!
+    'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
     'git_addr' => 'git@github.com', // don't change for GitHub
     'remote_name' => 'origin',
     'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
