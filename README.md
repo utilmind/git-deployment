@@ -4,7 +4,7 @@ Git deployment (and monitoring the code integrity) examples by UtilMind
 
 #### QUICK START:
 1. Rename this PHP-script into your project name
-2. Modify the configuration options below ($CONFIG), according to your environment. (Don't forget to specify unique 'secret'.)
+2. Modify the configuration options below ($CONFIG), according to your environment. (Don't forget to specify unique 'secret'. Use the same secret passphrase for your Git Webhook.)
 3. Upload this script to your serer and point the URL to this script as WebHook.
 
 If you did everything right, your web project will be automatically updated from Git on every `git push`. All files and directory structure on your web server will be synchronized with the content in Git repository. Everything will be mirrored, everything what supposed to be deleted will be deleted.
