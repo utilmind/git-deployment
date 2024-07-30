@@ -42,6 +42,8 @@ $CONFIG = [
     'remote_name' => 'origin',
     'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
 
+    // You will need to set up write permission for the following directories.
+    // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir' => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
     'target_dir' => '/path/to/published/project', // should point to the root directory of your published project
     'repo_username' => 'YOUR_USERNAME',
