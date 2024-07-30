@@ -11,6 +11,9 @@
            (Don't forget to specify unique 'secret'. Use the same secret passphrase for your Git Webhook.)
         3. Upload this script to your serer and point the URL to this script as WebHook.
 
+        * (It's obvious, but...) You will need to generate deployment key on your server. Read instructions by the following link:
+           https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+
         If you did everything right, your web project will be automatically updated from Git on every `git push`.
         All files and directory structure on your web server will be synchronized with the content in Git repository.
         Everything will be mirrored, everything what supposed to be deleted will be deleted.
@@ -24,7 +27,7 @@
           If you think that you need to be a sudoer to use this script -- you're doing something wrong.
           The web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
 
-        * Do not accidentally publish /.git directory. Keep it outside of any public_html's.
+        * Do not accidentally publish /.git directory to some location accessible via HTTP(s). Keep it outside of any public_html's!
 
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
