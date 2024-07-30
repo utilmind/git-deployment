@@ -132,7 +132,6 @@ function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // scrip
 
     $msg.= "\n";
     $out.= $msg;
-    echo $msg;
 
     if ($CONFIG['log_output']) {
         file_put_contents(__DIR__."/$log_name.log",
@@ -141,10 +140,13 @@ function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // scrip
     }
 
     // Terminate if any $http_exit_code specified.
+    if ($http_exit_code && (200 !== $http_exit_code)) {
+        http_response_code($http_exit_code);
+    }
+
+    echo $msg; // after possible http_response_code(), after headers sent
+
     if ($http_exit_code) {
-        if (200 !== $http_exit_code) {
-            http_response_code($http_exit_code);
-        }
         exit;
     }
 }
