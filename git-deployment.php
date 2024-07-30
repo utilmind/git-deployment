@@ -241,8 +241,8 @@ if ($CONFIG['is_test']) {
             print_log('Unauthorized', 403);
         }
 
-    }elseif (!isset($headers['x-hub-signature-256']) ||
-            !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $headers['x-hub-signature-256'])) {
+    }elseif (!isset($headers['x-hub-signature-256'])
+            || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $headers['x-hub-signature-256'])) {
         print_log('Unauthorized', 403);
     }
 
