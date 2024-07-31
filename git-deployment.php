@@ -12,7 +12,8 @@
         3. Upload this script to your serer and point the URL to this script as WebHook.
 
         * (It's obvious, but...) You will need to generate deployment key on your server. Read instructions by the following link:
-           https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+          https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+          Also, please don't generate accidentally deployment key for root user. Use the key accessible for "user" specified in HTTP server config.
 
         If you did everything right, your web project will be automatically updated from Git on every `git push`.
         All files and directory structure on your web server will be synchronized with the content in Git repository.
@@ -241,8 +242,8 @@ if ($CONFIG['is_test']) {
             print_log('Unauthorized', 403);
         }
 
-    }elseif (!isset($headers['x-hub-signature-256'])
-            || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $headers['x-hub-signature-256'])) {
+    }elseif (!isset($headers['x-hub-signature-256']) ||
+            !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $headers['x-hub-signature-256'])) {
         print_log('Unauthorized', 403);
     }
 
@@ -265,31 +266,44 @@ if ($CONFIG['log_output']) {
     @unlink(__DIR__."/$log_name.log"); // clearing previous log
 }
 
-exec('whoami', $whoami, $retval);
-print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user '$whoami[0]'...", 0, true);
+$current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // alternative is exec('whoami', $whoami, $retval); $current_user = $whoami[0];
+print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...", 0, true);
 $start_time = microtime(1);
 
-chdir($git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch); // switching into Git directory
-
+$git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
 if (is_dir($git_dir.'/.git')) {
+    chdir($git_dir);
+
     // If you need to discard all possible local changes: first "stash" them, then clear stash list.
     //git stash
     //git stash clear
 
     // But I prefer to do the "hard reset" instead of "stashing".
-    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch");
+    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
     // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
     exec_log("git checkout $branch");
 
 }elseif ($CONFIG['allow_init_new_git']) { // init repository from scratch, if it doesn't exists.
     exec_log("git init \"$git_dir\"");
-    exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git");
+    chdir($git_dir); // switch into created dir (if 'git init' was successful)
+
+    exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
+
+    // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
+    $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
+    if (!file_exists($CONFIG['known_hosts'])
+                || (!$file_content = file_get_contents($file_path))
+                || (false === strpos($file_contant, $CONFIG['known_hosts'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
+        // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
+        // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
+        exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
+    }
 
     // "Prefetch" initially at least to see available branches
     exec_log('git fetch');
 
     // This discards all possible changes in local directory and pull everything from git
-    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch");
+    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
     // Set the branch to work with
     exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
 
@@ -299,10 +313,10 @@ if (is_dir($git_dir.'/.git')) {
 
 // Fetch updates
 $fetch_result = exec_log('git fetch');
-if (0 !== $retval) {
-    print_log("Git Fetch failed with exit code $retval.");
-    if (128 === $retval) {
-        print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key for user $whoami[0]?");
+if (0 !== $fetch_result) {
+    print_log("Git Fetch failed with exit code $fetch_result.");
+    if (128 === $fetch_result) {
+        print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key for user $current_user?");
     }
 }
 
