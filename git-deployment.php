@@ -1,6 +1,9 @@
 <?php
+<?php
 /**
     Git deployment script example by UtilMind.
+    ==========================================
+    !! WARNING !! Never deploy anything under 'root' privileges, automatically or manually !! Never deploy anything as user with 'sudoer' privilegy !!
 
     @see       https://github.com/utilmind/git-deployment/ The GitHub project
     @author    Oleksii Kuznietsov (utilmind) <utilmind@gmail.com>
@@ -10,10 +13,6 @@
         2. Modify the configuration options below ($CONFIG), according to your environment.
            (Don't forget to specify unique 'secret'. Use the same secret passphrase for your Git Webhook.)
         3. Upload this script to your serer and point the URL to this script as WebHook.
-
-        * (It's obvious, but...) You will need to generate deployment key on your server. Read instructions by the following link:
-          https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
-          Also, please don't generate accidentally deployment key for root user. Use the key accessible for "user" specified in HTTP server config.
 
         If you did everything right, your web project will be automatically updated from Git on every `git push`.
         All files and directory structure on your web server will be synchronized with the content in Git repository.
@@ -28,7 +27,10 @@
           If you think that you need to be a sudoer to use this script -- you're doing something wrong.
           The web user should NEVER have a super-privileges. Otherwise your web app is critically vulnerable.
 
-        * Do not accidentally publish /.git directory to some location accessible via HTTP(s). Keep it outside of any public_html's!
+        * Do not accidentally publish /.git directory. Keep it outside of any public_html's.
+
+        * Do not accidentally fetch/deploy the branch under 'root' privileges or some other users, different than web user (used by HTTP server).
+          If this does happen, all further deployments may fail. Then the whole directory with .git branch should be removed and redeployed from scratch.
 
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
@@ -41,7 +43,9 @@ $CONFIG = [
     'allow_init_new_git' => true, // allow to initialize new local .git repository, if 'git_dir' doesn't exists. (Find 'git_dir' option below.)
     'log_output' => true, // log file name is 'this_script_name.log'.
 
+     // !! Don't keep any secrets and passwords in Git, use some environment variable instead.
     'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
+
     'git_addr' => 'git@github.com', // don't change for GitHub
     'remote_name' => 'origin',
     'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
@@ -326,4 +330,23 @@ chdir($CONFIG['target_dir']);
 // Pull updates
 $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
 // Done
-print_log("'git pull' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.', 200); // 0 is good!
+print_log("'git pull' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
+
+
+// Remove deployed garbage
+// =======================
+
+// Delete directory
+//exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
+
+// Delete .htaccess in target_dir and all subdirectories. (If Nginx used on production server. We may use .htaccess in local environement, but not need them on live Nginx.)
+//exec_log("find $CONFIG[target_dir]/website/www/ -type f -name \".htaccess\" -exec rm -f {} \\;");
+
+// Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
+//exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+
+
+// ... (+ increase version number somewhere in environment variables) ...
+
+
+print_log('Cleared some garbage and updated access privileges.', 200); // exit with "200 OK".
