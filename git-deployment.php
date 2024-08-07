@@ -1,5 +1,4 @@
 <?php
-<?php
 /**
     Git deployment script example by UtilMind.
     ==========================================
@@ -30,7 +29,8 @@
         * Do not accidentally publish /.git directory. Keep it outside of any public_html's.
 
         * Do not accidentally fetch/deploy the branch under 'root' privileges or some other users, different than web user (used by HTTP server).
-          If this does happen, all further deployments may fail. Then the whole directory with .git branch should be removed and redeployed from scratch.
+          No matter, manually or automatically. If this does happen, all further deployments may fail. Then the whole directory with .git branch
+          should be removed and redeployed from scratch.
 
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
@@ -161,7 +161,7 @@ function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // scrip
 
 // Execute command + output and log the result.
 // Return value is result code
-function exec_log($command) {
+function exec_log($command, $debug_stderr = false) {
     print_log('>> '.$command);
 
     try { // We could use 'exec($command, $stdout, $result_code);', but we'd like to catch STDERR too.
@@ -169,9 +169,44 @@ function exec_log($command) {
                     1 => ['pipe', 'w'], // STDOUT
                     2 => ['pipe', 'w'], // STDERR
                 ], $pipes);
+
+        // Reading STDOUT
         $stdout = stream_get_contents($pipes[1]);
         fclose($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
+
+        if ($debug_stderr) {
+            // AK 2024-08-07: I had issue with getting error stream on 'git fetch'. Reason unknown, all file permissions was ok.
+            // Solved after commenting out ob_start() and ob_end_flush() in the response to GitHub. But let's keep this debug block for while, maybe it will be useful...
+            print_log('Getting error stream...');
+
+            // Set the timeout and non-blocking mode
+            stream_set_timeout($pipes[2], 5); // Timeout in seconds
+            stream_set_blocking($pipes[2], false); // Non-blocking mode
+
+            // Initializing STDERR to read stream by chunks
+            $stderr = '';
+            $start_time = time();
+
+            // Reading STDERR with timeout checking
+            while (!feof($pipes[2])) {
+                $stderr .= fread($pipes[2], 8192);
+                $info = stream_get_meta_data($pipes[2]);
+                if ($info['timed_out']) {
+                    print_log('Timeout occurred while reading from pipe.');
+                    break;
+                }
+                // Additional check to stop the loop if automatic timeout failed
+                if (6 < time() - $start_time) {
+                    print_log('Manual timeout occurred.');
+                    break;
+                }
+            }
+
+            print_log('Error stream received.');
+        }else {
+            $stderr = stream_get_contents($pipes[2]);
+        }
+
         fclose($pipes[2]);
 
     }catch (Exception $e) {
@@ -256,10 +291,10 @@ if ($CONFIG['is_test']) {
     // Return output to GitHub before actual script execution. Idea: https://stackoverflow.com/questions/1019867/is-there-a-way-to-use-shell-exec-without-waiting-for-the-command-to-complete
     //ob_end_clean(); // if we'd have any output already
     ignore_user_abort();
-    ob_start();
+    //ob_start(); // AK 2024-08-07: we supposed to use this, but this caused issue with STDERR stream while reading 'git fetch'. Issue solved after commenting out this line and following ob_end_flush(). Reason is unclear, research needed.
     header('Connection: close');
     header('Content-Length: '.ob_get_length());
-    ob_end_flush();
+    //ob_end_flush();
     flush();
 } // end if $CONFIG['is_test']
 
@@ -316,7 +351,7 @@ if (is_dir($git_dir.'/.git')) {
 }
 
 // Fetch updates
-$fetch_result = exec_log('git fetch');
+$fetch_result = exec_log('git fetch'); // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
 if (0 !== $fetch_result) {
     print_log("Git Fetch failed with exit code $fetch_result.");
     if (128 === $fetch_result) {
