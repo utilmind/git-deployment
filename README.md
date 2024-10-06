@@ -17,7 +17,7 @@ The good practice is to use code integrity checker, to monitor the code and info
 
 #### CONTRIBUTORS to original branch:
 * Please keep PHP7.4+ syntax;
-* Don't require any other libraries. Use only standard PHP5 functions.
+* Don't require any other libraries. Use only standard functions.
 
 #### MISCELLANEOUS TIPS:
 * How to create Deploy key: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
