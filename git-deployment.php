@@ -33,7 +33,6 @@
           should be removed and redeployed from scratch.
 
     CONTRIBUTORS to original branch:
-        * Please keep legacy PHP5 syntax;
         * Don't require any other libraries. Use only standard PHP5 functions.
 
     MISCELLANEOUS TIPS:
@@ -65,16 +64,20 @@ $CONFIG = [
      // !! Don't keep any secrets and passwords in Git, use some environment variable instead.
     'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
 
-    'git_addr' => 'git@github.com', // don't change for github.com. Or use different hostname, like git@bitbucket.org.
-    'remote_name' => 'origin',
-    'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
+    'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
+    'git_addr'      => 'git@github.com', // don't change for GitHub
+    'known_hosts'   => ($_SERVER['HOME'] ?? '~').'/.ssh/known_hosts', // location of "known_hosts". Use full path, ~ in '~/.ssh/known_hosts' is not interpreted by PHP. Usually specified path should not be changed. We adding the fingerprint of 'git_host' into the list of known_hosts to avoid confirmation via CLI.
+    'remote_name'   => 'origin',
+    'default_branch'=> 'master', // only for test mode. It automatically determinates the branch nage from Git.
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
-    'git_dir' => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
-    'target_dir' => '/path/to/published/project', // should point to the root directory of your published project
+    'git_dir'       => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
+    'target_dir'    => '/path/to/published/project', // should point to the root directory of your published project
     'repo_username' => 'YOUR_USERNAME',
-    'repo_name' => 'YOUR_REPOSITORY_NAME',
+    'repo_name'     => 'YOUR_REPOSITORY_NAME',
+
+    'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 ];
 
 
@@ -91,7 +94,7 @@ ob_implicit_flush(1);
 @ob_end_flush(); // it doesn't works (returns notice) on my local Windows PC, but required to start output without buffering
 set_time_limit(900); // +15 minutes for execution. (Extend later if required!)
 header('Content-type: text/plain'); // no HTML-formatting for output
-
+ob_start(); // to catch all errors
 
 // -- FUNCTIONS --
 // Polyfill for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
@@ -161,9 +164,9 @@ function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // scrip
     $out.= $msg;
 
     if ($CONFIG['log_output']) {
-        file_put_contents(__DIR__."/$log_name.log",
+        file_put_contents("$CONFIG[log_path]$log_name.log",
             ($print_ip_time ? 'IP: '.get_ip().', '.date('r')."\n" : ''). // we output this when the process starts or on authentication errors.
-            $msg.($http_exit_code ? "\n" : ''), FILE_APPEND); // make sure that this directory writeable for current user (DAEMON?)
+            $msg.($http_exit_code ? "\n" : ''), FILE_APPEND);
     }
 
     // Terminate if any $http_exit_code specified.
@@ -180,7 +183,7 @@ function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // scrip
 
 // Execute command + output and log the result.
 // Return value is result code
-function exec_log($command, $debug_stderr = false) {
+function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false) {
     print_log('>> '.$command);
 
     try { // We could use 'exec($command, $stdout, $result_code);', but we'd like to catch STDERR too.
@@ -249,7 +252,7 @@ function exec_log($command, $debug_stderr = false) {
             exit;
         }
         if (!$stdout) {
-            print_log("ERROR: '$command' not executed? Empty output. Return value: $result_code.", 500);
+            print_log("ERROR: '$command' not executed? Empty output. Return value: $result_code.", $ignore_empty_stdout ? null : 500);
         }
     }
 
@@ -259,26 +262,32 @@ function exec_log($command, $debug_stderr = false) {
 
 // -- GO! --
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
+$branch = $CONFIG['default_branch']; // default, while it's not determined yet.
 
-if ($CONFIG['is_test']) {
-    $branch = $CONFIG['default_branch'];
-
-}else {
+if (!$CONFIG['is_test']) {
     $log_name = $this_name.'-authentication-error';
 
-    if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
-        print_log('Bad request: no payload or bad payload', 400, true);
+    // Check POSTed data
+    switch ($CONFIG['git_host']) {
+        case 'github.com':
+            if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
+                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400, true);
+            }
+
+            $ref = explode('/', $payload['ref']);
+            if (!$branch = end($ref)) {
+                print_log('No branch', 400, true);
+            }
+
+        // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
     }
 
-    $ref = explode('/', $payload['ref']);
-    if (!$branch = end($ref)) {
-        print_log('No branch', 400, true);
-    }
 
+    // Check HTTP headers
     $headers = function_exists('getallheaders') ? getallheaders() : []; // getallheaders() doesn't exists if script executed as CLI.
     if (count($headers)) {
         if ($CONFIG['log_output']) {
-            file_put_contents(__DIR__.'/'.$this_name.'-request-headers.log', print_r($headers, true)."\n-- Payload:\n".print_r($payload, true)); // make sure that this directory writeable for current user (DAEMON?)
+            file_put_contents("$CONFIG[log_path]$this_name-request-headers.log", print_r($headers, true)."\n-- Payload:\n".print_r($payload, true));
         }
 
         // make header keys lowercase (they are case insetive according to RFC 2616), and sometimes GitHub may send headers with different characters case.
@@ -288,21 +297,42 @@ if ($CONFIG['is_test']) {
         }
     }
 
-    if (!isset($headers['x-github-event'])) print_log('No service event', 400);
-    if ($headers['x-github-event'] !== 'push') print_log('Wrong service event: '.$headers['x-github-event'], 400);
+    switch ($CONFIG['git_host']) {
+        case 'github.com':
+            if (!isset($headers['x-github-event'])) {
+                print_log('No service event', 400, true);
+            }
+            $is_push = 'push' === $headers['x-github-event'];
 
-    $input = file_get_contents('php://input');
-    if (!$input) print_log('No input', 400);
+        case 'bitbucket.org':
+            if (!isset($headers['x-event-key'])) {
+                print_log('No service event', 400, true);
+            }
+            $is_push = 'repo:push' === $headers['x-event-key'];
+    }
 
-    // Verify signature
-    if (isset($_POST['admin-key']) && ($key = $_POST['admin-key'])) {
+    if (!$is_push) {
+        print_log('Wrong service event: '.$service_event, 400, true);
+    }
+
+    if (!$input = file_get_contents('php://input')) {
+        print_log('No input', 400, true);
+    }
+
+    if ($CONFIG['log_output']) {
+        file_put_contents("$CONFIG[log_path]$this_name-request-input.log", $input);
+    }
+
+    // Verify POSTed admin-key (AK: This should be deprecated. Avoid using this.)
+    if (isset($_POST['admin-key']) && ($key = $_POST['admin-key']) && isset($_KEYS['google_api_key'])) {
         if (!password_verify($_KEYS['google_api_key'], '$2y$'.$key)) {
-            print_log('Unauthorized', 403);
+            print_log('Bad admin key', 401, true);
         }
 
-    }elseif (!isset($headers['x-hub-signature-256']) ||
-            !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $headers['x-hub-signature-256'])) {
-        print_log('Unauthorized', 403);
+    // Verify signature
+    }elseif ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
+                || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $signature)) {
+        print_log('Unauthorized', 401, true);
     }
 
 
@@ -324,7 +354,7 @@ if ($CONFIG['log_output']) {
     @unlink(__DIR__."/$log_name.log"); // clearing previous log
 }
 
-$current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // alternative is exec('whoami', $whoami, $retval); $current_user = $whoami[0];
+$current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // Ultimate alternative is exec('whoami', $whoami, $retval); $current_user = $whoami[0];
 print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...", 0, true);
 $start_time = microtime(1);
 
@@ -359,9 +389,9 @@ if (is_dir($git_dir.'/.git')) {
 
     // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
     $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
-    if (!file_exists($CONFIG['known_hosts'])
-                || (!$file_content = file_get_contents($file_path))
-                || (false === strpos($file_contant, $CONFIG['known_hosts'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
+    if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
+                || (!$file_content = file_get_contents($CONFIG['known_hosts']))
+                || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
         // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
         // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
         exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
@@ -403,14 +433,50 @@ print_log("'git pull' finished with code $ret_val in ".number_format(microtime(1
 // Delete directory
 //exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
 
-// Delete .htaccess in target_dir and all subdirectories. (If Nginx used on production server. We may use .htaccess in local environement, but not need them on live Nginx.)
-//exec_log("find $CONFIG[target_dir]/website/www/ -type f -name \".htaccess\" -exec rm -f {} \\;");
-
+// Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
+//exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
 // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
 //exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
 
+/*
+function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
+    // Make all .SH-files (except hidden) in /tools/ directory executable.
+    if ($dir_handle = opendir($dir_name)) {
+        try {
+            while (false !== ($entry = readdir($dir_handle))) {
+                if ('.' === $entry[0]) { // skip all directories and system (hidden) files
+                    continue;
+                }
 
-// ... (+ increase version number somewhere in environment variables) ...
+                if (is_dir($fn = $dir_name . DIRECTORY_SEPARATOR . $entry)) {
+                    change_dir_permission($fn, $file_ext, $permission);
 
+                // Only if file has .sh extension
+                }elseif ($file_ext === pathinfo($entry, PATHINFO_EXTENSION)) {
+                    $permission_str = sprintf('%04o', $permission); // dec to oct
+                    // Update access privileges
+                    print_log(chmod($fn, $permission)
+                        ? "$permission_str privileges applied for $fn"
+                        : "ERROR on setting $permission_str privileges for $fn");
+                }
+            }
+        }finally {
+            closedir($dir_handle);
+        }
+    }else {
+        print_log("Can't open $dir_name");
+    }
+}
+
+change_dir_permission($CONFIG['target_dir'].'/tools', 'sh', 0755);
+*/
+
+// Execute some script, like increase version in some environment variable
+//exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=");
+
+// get all stdout
+$out = ob_get_contents();
+ob_end_clean();
+file_put_contents("$CONFIG[log_path]$log_name-stdout.log", $out);
 
 print_log('Cleared some garbage and updated access privileges.', 200); // exit with "200 OK".
