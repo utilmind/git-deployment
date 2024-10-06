@@ -16,7 +16,7 @@ The good practice is to use code integrity checker, to monitor the code and info
 * Do not accidentally publish `/.git` directory. Keep it outside of any `public_html`’s.
 
 #### CONTRIBUTORS to original branch:
-* Please keep legacy PHP5 syntax;
+* Please keep PHP7.4+ syntax;
 * Don't require any other libraries. Use only standard PHP5 functions.
 
 #### MISCELLANEOUS TIPS:
