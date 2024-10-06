@@ -1,6 +1,14 @@
 # git-deployment and code-integrity-checker
 
-Git deployment (and monitoring the code integrity) examples by UtilMind
+Git deployment example by UtilMind.
+
+Plus:
+   + monitoring the code integrity
+   + increase of the version number in some environment variable
+
+Supports
+   * GitHub
+   * BitBucket
 
 #### QUICK START:
 1. Rename this PHP-script into your project name
