@@ -137,21 +137,24 @@ function get_ip() {
 // Write to log + output as text
 function print_log($msg, $http_exit_code = 0) { // if $http_exit_code specified, then script terminating (exiting).
     global $CONFIG, $out, $log_name;
-    static $is_first_output = true; // AK: we want to output IP and date before starting the output.
-
-    if ($is_first_output) {
-        $is_first_output = false;
-        $msg = 'IP: '.get_ip().', '.date('r')."\n$msg"; // we output this when the process starts or on authentication errors.
-    }
 
     $msg.= "\n";
-    if ($http_exit_code) {
-        $msg .= "\n";
-    }
     $out.= $msg;
 
     if ($CONFIG['log_output']) {
-        file_put_contents("$CONFIG[log_path]$log_name.log", $msg, FILE_APPEND);
+        static $is_first_output = true; // AK: we want to log IP and date in start.
+
+        $log = $msg;
+        // IP and date are only for the log file. They are not needed in stdout.
+        if ($is_first_output) {
+            $is_first_output = false;
+            $log = 'IP: '.get_ip().', '.date('r')."\n$log"; // we output this when the process starts or on authentication errors.
+        }
+        if ($http_exit_code) {
+            $log .= "\n"; // one more line separator in log
+        }
+
+        file_put_contents("$CONFIG[log_path]$log_name.log", $log, FILE_APPEND);
     }
 
     // Terminate if any $http_exit_code specified.
