@@ -18,3 +18,25 @@ The good practice is to use code integrity checker, to monitor the code and info
 #### CONTRIBUTORS to original branch:
 * Please keep legacy PHP5 syntax;
 * Don't require any other libraries. Use only standard PHP5 functions.
+
+#### MISCELLANEOUS TIPS:
+* How to create Deploy key: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+  Briefly...
+  
+  1. Generate key:
+    ```
+      ssh-keygen -t ed25519 -C "<email@address>" -f <key_file_name>
+    ```
+  2. Add key to ssh-agent:
+    ```
+      `eval "$(ssh-agent -s)"
+      ssh-add ~/.ssh/<key_file_name>`
+    ```
+  3. Open /etc/ssh/ssh_config (or create new file in "/etc/ssh/ssh_config/ssh_config.d/" if your ssh_config including files in "ssh_config.d" directory, or use local config "~/.ssh/config")
+  Add some record like follows:
+    ```
+    Host <git_hostname, eg. github.com or bitbucket.org>-<your_repository_name>
+      HostName <git_hostname, eg. github.com or bitbucket.org>
+      IdentityFile ~/.ssh/<key_file_name>
+      IdentitiesOnly yes
+    ```
