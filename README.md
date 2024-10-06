@@ -8,7 +8,7 @@ Plus:
 
 Supports
    * GitHub
-   * BitBucket
+   * Bitbucket
 
 #### QUICK START:
 1. Rename this PHP-script into your project name
