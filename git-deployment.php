@@ -33,7 +33,7 @@
           should be removed and redeployed from scratch.
 
     CONTRIBUTORS to original branch:
-        * Don't require any other libraries. Use only standard PHP5 functions.
+        * Don't require any other libraries. Use only standard functions.
 
     MISCELLANEOUS TIPS:
         * How to create Deploy key: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
@@ -97,28 +97,6 @@ header('Content-type: text/plain'); // no HTML-formatting for output
 ob_start(); // to catch all errors
 
 // -- FUNCTIONS --
-// Polyfill for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
-if (!function_exists('hash_equals')) {
-    function hash_equals($known_str, $user_str) {
-        if (function_exists('mb_strlen')) {
-            $kLen = mb_strlen($known_str, '8bit');
-            $uLen = mb_strlen($user_str, '8bit');
-        }else {
-            $kLen = strlen($known_str);
-            $uLen = strlen($user_str);
-        }
-        if ($kLen !== $uLen) {
-            return false;
-        }
-        $result = 0;
-        for ($i = 0; $i < $kLen; ++$i) {
-            $result |= (ord($known_str[$i]) ^ ord($user_str[$i]));
-        }
-        // They are only identical strings if $result is exactly 0...
-        return 0 === $result;
-    }
-}
-
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
     Maximum length of returned value is 45 characters.
 
@@ -331,6 +309,7 @@ if (!$CONFIG['is_test']) {
 
     // Verify signature
     }elseif ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
+                // Polyfill of hash_equals() for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
                 || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $signature)) {
         print_log('Unauthorized', 401, true);
     }
