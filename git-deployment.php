@@ -57,12 +57,12 @@
 
 // -- CONFIGURATION --
 $CONFIG = [
-    'is_test' => false, // set to TRUE only to test, to skip authentication. Normally should be always FALSE.
+    'is_test'       => false, // set to TRUE only to test, to skip authentication. Normally should be always FALSE.
     'allow_init_new_git' => true, // allow to initialize new local .git repository, if 'git_dir' doesn't exists. (Find 'git_dir' option below.)
-    'log_output' => true, // log file name is 'this_script_name.log'.
+    'log_output'    => true, // log file name is 'this_script_name.log'.
 
      // !! Don't keep any secrets and passwords in Git, use some environment variable instead.
-    'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
+    'secret'        => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
 
     'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
     'git_addr'      => 'git@github.com', // don't change for GitHub
