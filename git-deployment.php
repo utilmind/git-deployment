@@ -1,5 +1,5 @@
 <?php
-/**
+/***
     Git deployment script example by UtilMind.
     ==========================================
     !! WARNING !! Never deploy anything under 'root' privileges, automatically or manually !! Never deploy anything as user with 'sudoer' privilegy !!
@@ -53,7 +53,7 @@
         * Always generate SSH key for web user only (e.g. www-data or deamon, depending which username execute scripts in your HTTP server, depending which user executing this deployment script).
 
         * Your deployment directory must be write-accessible for the web-user.
-**/
+***/
 
 // -- CONFIGURATION --
 $CONFIG = [
@@ -135,16 +135,23 @@ function get_ip() {
 }
 
 // Write to log + output as text
-function print_log($msg, $http_exit_code = 0, $print_ip_time = false) { // script terminating if $http_exit_code specified
+function print_log($msg, $http_exit_code = 0) { // if $http_exit_code specified, then script terminating (exiting).
     global $CONFIG, $out, $log_name;
+    static $is_first_output = true; // AK: we want to output IP and date before starting the output.
+
+    if ($is_first_output) {
+        $is_first_output = false;
+        $msg = 'IP: '.get_ip().', '.date('r')."\n$msg"; // we output this when the process starts or on authentication errors.
+    }
 
     $msg.= "\n";
+    if ($http_exit_code) {
+        $msg .= "\n";
+    }
     $out.= $msg;
 
     if ($CONFIG['log_output']) {
-        file_put_contents("$CONFIG[log_path]$log_name.log",
-            ($print_ip_time ? 'IP: '.get_ip().', '.date('r')."\n" : ''). // we output this when the process starts or on authentication errors.
-            $msg.($http_exit_code ? "\n" : ''), FILE_APPEND);
+        file_put_contents("$CONFIG[log_path]$log_name.log", $msg, FILE_APPEND);
     }
 
     // Terminate if any $http_exit_code specified.
@@ -196,7 +203,7 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
                     break;
                 }
                 // Additional check to stop the loop if automatic timeout failed
-                if (6 < time() - $start_time) {
+                if (6 < time() - $start_time) { // AK: I think 6 seconds is enough. But feel free to adjust.
                     print_log('Manual timeout occurred.');
                     break;
                 }
@@ -227,7 +234,6 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
     if (0 !== $result_code) { // 0 is okay
         if (127 === $result_code) {
             print_log("ERROR: '$command' can't be executed. Command not found or not installed. Exiting.", 500); // nothing to execute?
-            exit;
         }
         if (!$stdout) {
             print_log("ERROR: '$command' not executed? Empty output. Return value: $result_code.", $ignore_empty_stdout ? null : 500);
@@ -242,6 +248,7 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
 $branch = $CONFIG['default_branch']; // default, while it's not determined yet.
 
+// VALIDATION... (We don't want to give any output before request validated. Except errors, of course.)
 if (!$CONFIG['is_test']) {
     $log_name = $this_name.'-authentication-error';
 
@@ -249,13 +256,14 @@ if (!$CONFIG['is_test']) {
     switch ($CONFIG['git_host']) {
         case 'github.com':
             if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
-                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400, true);
+                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400);
             }
 
             $ref = explode('/', $payload['ref']);
             if (!$branch = end($ref)) {
-                print_log('No branch', 400, true);
+                print_log('No branch', 400);
             }
+            break;
 
         // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
     }
@@ -265,7 +273,13 @@ if (!$CONFIG['is_test']) {
     $headers = function_exists('getallheaders') ? getallheaders() : []; // getallheaders() doesn't exists if script executed as CLI.
     if (count($headers)) {
         if ($CONFIG['log_output']) {
-            file_put_contents("$CONFIG[log_path]$this_name-request-headers.log", print_r($headers, true)."\n-- Payload:\n".print_r($payload, true));
+            file_put_contents("$CONFIG[log_path]$this_name-request-headers.log",
+                    print_r($headers, true)
+                        // if have POSTed payload (e.g. from GitHub)
+                        . (isset($payload)
+                                ? "\n-- Payload:\n".print_r($payload, true)
+                                : '')
+                );
         }
 
         // make header keys lowercase (they are case insetive according to RFC 2616), and sometimes GitHub may send headers with different characters case.
@@ -278,23 +292,23 @@ if (!$CONFIG['is_test']) {
     switch ($CONFIG['git_host']) {
         case 'github.com':
             if (!isset($headers['x-github-event'])) {
-                print_log('No service event', 400, true);
+                print_log('No service event', 400);
             }
             $is_push = 'push' === $headers['x-github-event'];
 
         case 'bitbucket.org':
             if (!isset($headers['x-event-key'])) {
-                print_log('No service event', 400, true);
+                print_log('No service event', 400);
             }
             $is_push = 'repo:push' === $headers['x-event-key'];
     }
 
     if (!$is_push) {
-        print_log('Wrong service event: '.$service_event, 400, true);
+        print_log('Wrong service event: '.$service_event, 400);
     }
 
     if (!$input = file_get_contents('php://input')) {
-        print_log('No input', 400, true);
+        print_log('No input', 400);
     }
 
     if ($CONFIG['log_output']) {
@@ -304,26 +318,22 @@ if (!$CONFIG['is_test']) {
     // Verify POSTed admin-key (AK: This should be deprecated. Avoid using this.)
     if (isset($_POST['admin-key']) && ($key = $_POST['admin-key']) && isset($_KEYS['google_api_key'])) {
         if (!password_verify($_KEYS['google_api_key'], '$2y$'.$key)) {
-            print_log('Bad admin key', 401, true);
+            print_log('Bad admin key', 401);
         }
 
     // Verify signature
     }elseif ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
                 // Polyfill of hash_equals() for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
                 || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $signature)) {
-        print_log('Unauthorized', 401, true);
+        print_log('Unauthorized', 401);
     }
 
 
     // -- RETURN --
-    // Return output to GitHub before actual script execution. Idea: https://stackoverflow.com/questions/1019867/is-there-a-way-to-use-shell-exec-without-waiting-for-the-command-to-complete
-    //ob_end_clean(); // if we'd have any output already
+    // Return output to Git before the actual script execution. Idea: https://stackoverflow.com/questions/1019867/is-there-a-way-to-use-shell-exec-without-waiting-for-the-command-to-complete
     ignore_user_abort();
-    //ob_start(); // AK 2024-08-07: we supposed to use this, but this caused issue with STDERR stream while reading 'git fetch'. Issue solved after commenting out this line and following ob_end_flush(). Reason is unclear, research needed.
-    header('Connection: close');
-    header('Content-Length: '.ob_get_length());
-    //ob_end_flush();
-    flush();
+    header('Connection: close'); // mb also header('Content-Length: 0'), but this is wrong.
+    flush(); // AK: but there is nothing to flush?
 } // end if $CONFIG['is_test']
 
 
@@ -334,128 +344,133 @@ if ($CONFIG['log_output']) {
 }
 
 $current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // Ultimate alternative is exec('whoami', $whoami, $retval); $current_user = $whoami[0];
-print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...", 0, true);
-$start_time = microtime(1);
+// Bitbucket wants some output immediately. So giving this before starting output buffer...
+print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...");
+$start_time = microtime(true);
+ob_start(); // to catch all further errors
+try {
+    $git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
+    if (is_dir($git_dir.'/.git')) {
+        chdir($git_dir);
 
-$git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
-if (is_dir($git_dir.'/.git')) {
-    chdir($git_dir);
+        // If you need to discard all possible local changes: first "stash" them, then clear stash list.
+        //git stash
+        //git stash clear
 
-    // If you need to discard all possible local changes: first "stash" them, then clear stash list.
-    //git stash
-    //git stash clear
+        // But I prefer to do the "hard reset" instead of "stashing".
+        exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
+        // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
+        exec_log("git checkout $branch");
 
-    // But I prefer to do the "hard reset" instead of "stashing".
-    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
-    // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
-    exec_log("git checkout $branch");
+    }elseif ($CONFIG['allow_init_new_git']) { // init repository from scratch, if it doesn't exists.
+        exec_log("git init \"$git_dir\"");
+        chdir($git_dir); // switch into created dir (if 'git init' was successful)
 
-}elseif ($CONFIG['allow_init_new_git']) { // init repository from scratch, if it doesn't exists.
-    exec_log("git init \"$git_dir\"");
-    chdir($git_dir); // switch into created dir (if 'git init' was successful)
+        /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
+        The typical record looks like follows:
 
-    /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
-       The typical record looks like follows:
+                Host bitbucket.org-repository_name
+                HostName bitbucket.org
+                IdentityFile ~/.ssh/id_ed25519_avmet
+                IdentitiesOnly yes
 
-            Host bitbucket.org-repository_name
-              HostName bitbucket.org
-              IdentityFile ~/.ssh/id_ed25519_avmet
-              IdentitiesOnly yes
+        If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
+        */
+        exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git", true); // add origin (or whatever 'remote_name')
 
-       If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
-    */
-    exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git", true); // add origin (or whatever 'remote_name')
-
-    // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
-    $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
-    if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
-                || (!$file_content = file_get_contents($CONFIG['known_hosts']))
-                || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
-        // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
-        // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
-        exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
-    }
-
-    // "Prefetch" initially at least to see available branches
-    exec_log('git fetch');
-
-    // This discards all possible changes in local directory and pull everything from git
-    exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
-    // Set the branch to work with
-    exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
-
-}else {
-    print_log("Local .git directory doesn't exist in '$git_dir'. Please initialize local Git repository first, with specifying the remote origin, or allow initialization of new Git in the configuration.", 500);
-}
-
-// Fetch updates
-$fetch_result = exec_log('git fetch'); // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
-if (0 !== $fetch_result) {
-    print_log("Git Fetch failed with exit code $fetch_result.");
-    if (128 === $fetch_result) {
-        print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key for user $current_user?");
-    }
-}
-
-// Go to the target directory to pull updates into it. Although we specifying the '--work-tree' option for 'pull', some Git versions seems ignoring this parameter.
-chdir($CONFIG['target_dir']);
-
-// Pull updates
-$ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
-// Done
-print_log("'git pull' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
-
-
-// Remove deployed garbage
-// =======================
-
-// Delete directory
-//exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
-
-// Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
-//exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
-// Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
-//exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
-
-/*
-function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
-    // Make all .SH-files (except hidden) in /tools/ directory executable.
-    if ($dir_handle = opendir($dir_name)) {
-        try {
-            while (false !== ($entry = readdir($dir_handle))) {
-                if ('.' === $entry[0]) { // skip all directories and system (hidden) files
-                    continue;
-                }
-
-                if (is_dir($fn = $dir_name . DIRECTORY_SEPARATOR . $entry)) {
-                    change_dir_permission($fn, $file_ext, $permission);
-
-                // Only if file has .sh extension
-                }elseif ($file_ext === pathinfo($entry, PATHINFO_EXTENSION)) {
-                    $permission_str = sprintf('%04o', $permission); // dec to oct
-                    // Update access privileges
-                    print_log(chmod($fn, $permission)
-                        ? "$permission_str privileges applied for $fn"
-                        : "ERROR on setting $permission_str privileges for $fn");
-                }
-            }
-        }finally {
-            closedir($dir_handle);
+        // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
+        $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
+        if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
+                    || (!$file_content = file_get_contents($CONFIG['known_hosts']))
+                    || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
+            // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
+            // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
+            exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
         }
+
+        // "Prefetch" initially at least to see available branches
+        exec_log('git fetch');
+
+        // This discards all possible changes in local directory and pull everything from git
+        exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
+        // Set the branch to work with
+        exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
+
     }else {
-        print_log("Can't open $dir_name");
+        print_log("Local .git directory doesn't exist in '$git_dir'. Please initialize local Git repository first, with specifying the remote origin, or allow initialization of new Git in the configuration.", 500);
     }
+
+    // Fetch updates
+    $fetch_result = exec_log('git fetch'); // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
+    if (0 !== $fetch_result) {
+        print_log("Git Fetch failed with exit code $fetch_result.");
+        if (128 === $fetch_result) {
+            print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key for user $current_user?");
+        }
+    }
+
+    // Go to the target directory to pull updates into it. Although we specifying the '--work-tree' option for 'pull', some Git versions seems ignoring this parameter.
+    chdir($CONFIG['target_dir']);
+
+    // Pull updates
+    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
+    // Done
+    print_log("'git pull' finished with code $ret_val in ".number_format(microtime(true) - $start_time, 3).' sec.'); // $ret_val 0 is good!
+
+
+    // Remove deployed garbage
+    // =======================
+    // Delete directory
+    exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
+
+    // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
+    //exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
+    // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
+    //exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+
+    /*
+    function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
+        // Make all .SH-files (except hidden) in /tools/ directory executable.
+        if ($dir_handle = opendir($dir_name)) {
+            try {
+                while (false !== ($entry = readdir($dir_handle))) {
+                    if ('.' === $entry[0]) { // skip all directories and system (hidden) files
+                        continue;
+                    }
+
+                    if (is_dir($fn = $dir_name . DIRECTORY_SEPARATOR . $entry)) {
+                        change_dir_permission($fn, $file_ext, $permission);
+
+                    // Only if file has .sh extension
+                    }elseif ($file_ext === pathinfo($entry, PATHINFO_EXTENSION)) {
+                        $permission_str = sprintf('%04o', $permission); // dec to oct
+                        // Update access privileges
+                        print_log(chmod($fn, $permission)
+                            ? "$permission_str privileges applied for $fn"
+                            : "ERROR on setting $permission_str privileges for $fn");
+                    }
+                }
+            }finally {
+                closedir($dir_handle);
+            }
+        }else {
+            print_log("Can't open $dir_name");
+        }
+    }
+    change_dir_permission($CONFIG['target_dir'].'/tools', 'sh', 0755);
+    */
+
+    // Execute something to increase version in some environment variable
+    //exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=")
+    print_log('Cleared some garbage and increased version number.');
+
+    print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
+
+}finally {
+    // get all stdout to write into log
+    $out = ob_get_contents();
+    ob_end_clean();
+    echo $out;
+
+    file_put_contents("$CONFIG[log_path]$log_name-stdout.log", $out);
 }
-
-change_dir_permission($CONFIG['target_dir'].'/tools', 'sh', 0755);
-*/
-
-// Execute some script, like increase version in some environment variable
-//exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=");
-
-// get all stdout
-$out = ob_get_contents();
-ob_end_clean();
-file_put_contents("$CONFIG[log_path]$log_name-stdout.log", $out);
-
-print_log('Cleared some garbage and updated access privileges.', 200); // exit with "200 OK".
