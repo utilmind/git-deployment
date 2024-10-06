@@ -50,6 +50,10 @@
                           HostName <git_hostname, eg. github.com or bitbucket.org>
                           IdentityFile ~/.ssh/<key_file_name>
                           IdentitiesOnly yes
+
+        * Always generate SSH key for web user only (e.g. www-data or deamon, depending which username execute scripts in your HTTP server, depending which user executing this deployment script).
+
+        * Your deployment directory must be write-accessible for the web-user.
 **/
 
 // -- CONFIGURATION --
