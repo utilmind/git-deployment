@@ -35,6 +35,21 @@
     CONTRIBUTORS to original branch:
         * Please keep legacy PHP5 syntax;
         * Don't require any other libraries. Use only standard PHP5 functions.
+
+    MISCELLANEOUS TIPS:
+        * How to create Deploy key: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+            Briefly...
+                1. Generate key:
+                    ssh-keygen -t ed25519 -C "<email@address>" -f <key_file_name>
+                2. Add key to ssh-agent:
+                    eval "$(ssh-agent -s)"
+                    ssh-add ~/.ssh/<key_file_name>
+                3. Open /etc/ssh/ssh_config (or create new file in "/etc/ssh/ssh_config/ssh_config.d/" if your ssh_config including files in "ssh_config.d" directory, or use local config "~/.ssh/config")
+                   Add some record like follows:
+                        Host <git_hostname, eg. github.com or bitbucket.org>-<your_repository_name>
+                          HostName <git_hostname, eg. github.com or bitbucket.org>
+                          IdentityFile ~/.ssh/<key_file_name>
+                          IdentitiesOnly yes
 **/
 
 // -- CONFIGURATION --
@@ -46,7 +61,7 @@ $CONFIG = [
      // !! Don't keep any secrets and passwords in Git, use some environment variable instead.
     'secret' => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
 
-    'git_addr' => 'git@github.com', // don't change for GitHub
+    'git_addr' => 'git@github.com', // don't change for github.com. Or use different hostname, like git@bitbucket.org.
     'remote_name' => 'origin',
     'default_branch' => 'master', // only for test mode. It automatically determinates the branch nage from Git.
 
@@ -326,7 +341,17 @@ if (is_dir($git_dir.'/.git')) {
     exec_log("git init \"$git_dir\"");
     chdir($git_dir); // switch into created dir (if 'git init' was successful)
 
-    exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
+    /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
+       The typical record looks like follows:
+
+            Host bitbucket.org-repository_name
+              HostName bitbucket.org
+              IdentityFile ~/.ssh/id_ed25519_avmet
+              IdentitiesOnly yes
+
+       If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
+    */
+    exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git", true); // add origin (or whatever 'remote_name')
 
     // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
     $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
