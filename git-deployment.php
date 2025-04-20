@@ -255,23 +255,6 @@ $branch = $CONFIG['default_branch']; // default, while it's not determined yet.
 if (!$CONFIG['is_test']) {
     $log_name = $this_name.'-authentication-error';
 
-    // Check POSTed data
-    switch ($CONFIG['git_host']) {
-        case 'github.com':
-            if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
-                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400);
-            }
-
-            $ref = explode('/', $payload['ref']);
-            if (!$branch = end($ref)) {
-                print_log('No branch', 400);
-            }
-            break;
-
-        // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
-    }
-
-
     // Check HTTP headers
     $headers = function_exists('getallheaders') ? getallheaders() : []; // getallheaders() doesn't exists if script executed as CLI.
     if (count($headers)) {
@@ -292,18 +275,34 @@ if (!$CONFIG['is_test']) {
         }
     }
 
+    // Check POSTed data and headers
     switch ($CONFIG['git_host']) {
         case 'github.com':
+            if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
+                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400);
+            }
+
+            $ref = explode('/', $payload['ref']);
+            if (!$branch = end($ref)) {
+                print_log('No branch', 400);
+            }
+
+            // Headers
             if (!isset($headers['x-github-event'])) {
                 print_log('No service event', 400);
             }
             $is_push = 'push' === $headers['x-github-event'];
 
-        case 'bitbucket.org':
+            break;
+
+        case 'bitbucket.org': // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
+            // Headers
             if (!isset($headers['x-event-key'])) {
                 print_log('No service event', 400);
             }
             $is_push = 'repo:push' === $headers['x-event-key'];
+
+            break;
     }
 
     if (!$is_push) {
