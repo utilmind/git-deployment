@@ -54,6 +54,11 @@
 
         * Your deployment directory must be write-accessible for the web-user.
 ***/
+// -- SHOW ALL ERRORS (even before the config)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 
 // -- CONFIGURATION --
 $CONFIG = [
@@ -80,11 +85,6 @@ $CONFIG = [
     'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 ];
 
-
-// -- SHOW ALL ERRORS
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
 
 // -- No output buffering. Output immediately
 @ini_set('output_buffering', 0);
@@ -334,9 +334,14 @@ if (!$CONFIG['is_test']) {
 
     // -- RETURN --
     // Return output to Git before the actual script execution. Idea: https://stackoverflow.com/questions/1019867/is-there-a-way-to-use-shell-exec-without-waiting-for-the-command-to-complete
-    ignore_user_abort();
-    header('Connection: close'); // mb also header('Content-Length: 0'), but this is wrong.
+    ignore_user_abort(true);
+    ob_end_flush();
+    header('Connection: close'); // mb also header('Content-Length: 0'), but this is wrong. Apache terminates connection and close STDOUT buffer after getting these headers.
     flush(); // AK: but there is nothing to flush?
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    }
 } // end if $CONFIG['is_test']
 
 
@@ -346,88 +351,87 @@ if ($CONFIG['log_output']) {
     @unlink(__DIR__."/$log_name.log"); // clearing previous log
 }
 
-$current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // Ultimate alternative is exec('whoami', $whoami, $retval); $current_user = $whoami[0];
+$current_user = $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME'] ?? '';
+if (!$current_user) { // It can be still not defined on Apache.
+    exec('whoami', $whoami, $retval);
+    $current_user = $whoami[0];
+}
+
 // Bitbucket wants some output immediately. So giving this before starting output buffer...
 print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...");
 $start_time = microtime(true);
 ob_start(); // to catch all further errors
 try {
     $git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
-    if (is_dir($git_dir.'/.git')) {
-        chdir($git_dir);
+    if (!is_dir($git_dir.'/.git')) {
+        if ($CONFIG['allow_init_new_git']) {
+            exec_log("git init \"$git_dir\"");
 
-        // If you need to discard all possible local changes: first "stash" them, then clear stash list.
-        //git stash
-        //git stash clear
+            /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
+            The typical record looks like follows:
 
-        // But I prefer to do the "hard reset" instead of "stashing".
-        exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
-        // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
-        exec_log("git checkout $branch");
+                    Host bitbucket.org-repository_name
+                    HostName bitbucket.org
+                    IdentityFile ~/.ssh/id_ed25519_avmet
+                    IdentitiesOnly yes
 
-    }elseif ($CONFIG['allow_init_new_git']) { // init repository from scratch, if it doesn't exists.
-        exec_log("git init \"$git_dir\"");
-        chdir($git_dir); // switch into created dir (if 'git init' was successful)
+            If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
+            */
+            exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
 
-        /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
-        The typical record looks like follows:
+            // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"... (must be writeable for $current_user!!)
+            $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
+            if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
+                        || (!$file_content = file_get_contents($CONFIG['known_hosts']))
+                        || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
+                // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
+                // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
+                exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
+            }
 
-                Host bitbucket.org-repository_name
-                HostName bitbucket.org
-                IdentityFile ~/.ssh/id_ed25519_avmet
-                IdentitiesOnly yes
-
-        If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
-        */
-        exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git", true); // add origin (or whatever 'remote_name')
-
-        // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"...
-        $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
-        if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
-                    || (!$file_content = file_get_contents($CONFIG['known_hosts']))
-                    || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
-            // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
-            // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
-            exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
+        }else {
+            print_log("Local .git directory doesn't exist in '$git_dir'. Please initialize local Git repository first, with specifying the remote origin, or allow initialization of new Git in the configuration.", 500);
         }
-
-        // "Prefetch" initially at least to see available branches
-        exec_log('git fetch');
-
-        // This discards all possible changes in local directory and pull everything from git
-        exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch"); // HARD RESET
-        // Set the branch to work with
-        exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
-
-    }else {
-        print_log("Local .git directory doesn't exist in '$git_dir'. Please initialize local Git repository first, with specifying the remote origin, or allow initialization of new Git in the configuration.", 500);
     }
 
+
     // Fetch updates
-    $fetch_result = exec_log('git fetch'); // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
+    // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
+    $fetch_result = exec_log("git --git-dir=\"$git_dir/.git\" fetch $CONFIG[remote_name]");
     if (0 !== $fetch_result) {
         print_log("Git Fetch failed with exit code $fetch_result.");
         if (128 === $fetch_result) {
-            print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key for user $current_user?");
+            print_log("Exit code 128 usually means that security credentials are invalid. CHECK YOUR DEPLOYMENT KEY! Is it listed in ~/.ssh? Access granted for 'ssh_config'? Is the key prepared for user $current_user?");
         }
     }
 
-    // Go to the target directory to pull updates into it. Although we specifying the '--work-tree' option for 'pull', some Git versions seems ignoring this parameter.
-    chdir($CONFIG['target_dir']);
-
-    // Pull updates
-    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
+    // ...We could PULL updates, but let's better do the "hard reset" to refresh EVERYTHING (if needed), not only updated stuff
+    // $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
+    // ...Do HARD RESET, to fully synchronize our deployment with Git...
+    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch");
     // Done
-    print_log("'git pull' finished with code $ret_val in ".number_format(microtime(true) - $start_time, 3).' sec.'); // $ret_val 0 is good!
+    print_log("'hard reset' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
 
 
-    // Remove deployed garbage
+    // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
+    // UPD. We actually don't need this. We don't switch branches, so it's useless.
+    //exec_log("git checkout $branch");
+    // Also if we need to set up the branch to work with (could be useful after initial hard reset)
+    //exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
+
+
+    // REMOVE DEPLOYED GARBAGE
     // =======================
+    // chdir($CONFIG['target_dir']);
+    // Consider 'git clean -fd' to remove untracked files.
+    //
     // Delete directory
     exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
 
     // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
     //exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
+    // Delete README.md and possible .sql files.
+    // exec_log("find $CONFIG[target_dir]/website/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
     // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
     //exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
 
