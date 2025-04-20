@@ -251,6 +251,10 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
 $branch = $CONFIG['default_branch']; // default, while it's not determined yet.
 
+if (!is_dir($CONFIG['log_path'])) {
+    @mkdir($CONFIG['log_path'], 0775, true);
+}
+
 // VALIDATION... (We don't want to give any output before request validated. Except errors, of course.)
 if (!$CONFIG['is_test']) {
     $log_name = $this_name.'-authentication-error';
@@ -279,7 +283,7 @@ if (!$CONFIG['is_test']) {
     switch ($CONFIG['git_host']) {
         case 'github.com':
             if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
-                print_log("Bad request: no payload or bad payload.\n".print_r($_POST, true)."\n".print_r($headers, true), 400);
+                print_log("Bad request: no payload or bad payload.\n\$_POST:\n".print_r($_POST, true)."\nHEADERS:\n".print_r($headers, true), 400);
             }
 
             $ref = explode('/', $payload['ref']);
@@ -376,7 +380,7 @@ try {
 
             If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
             */
-            exec_log("git remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
+            exec_log("git --git-dir=\"$git_dir/.git\" remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
 
             // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"... (must be writeable for $current_user!!)
             $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
