@@ -28,7 +28,7 @@ The good practice is to use code integrity checker, to monitor the code and info
 * Don't require any other libraries. Use only standard functions.
 
 #### MISCELLANEOUS TIPS:
-* How to create Deploy key: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
+* How to generate Access key for Git repository: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
   Briefly...
   
   1. Generate key:
