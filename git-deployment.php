@@ -369,7 +369,9 @@ print_log("Starting deployment of `$branch` branch into `$CONFIG[target_dir]` as
 $start_time = microtime(true);
 ob_start(); // to catch all further errors
 try {
+    // Path to private key can be specified if system can't find its location. E.g. if key stored in some custom location for web-user w/o home directory.
     if (!empty($CONFIG['private_key'])) {
+        // This points where the private key and `known_hosts` are stored.
         putenv('GIT_SSH_COMMAND='
                   . 'ssh'
                   . ' -i ' . escapeshellarg($CONFIG['private_key'])
