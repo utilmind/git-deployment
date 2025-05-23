@@ -61,6 +61,7 @@ error_reporting(E_ALL);
 
 
 // -- CONFIGURATION --
+define('__HOME_DIR__', $_SERVER['HOME'] ?? '~'); // where /.ssh/known_hosts stored. NO TRAILING SLASH!
 $CONFIG = [
     'is_test'       => false, // set to TRUE only to test, to skip authentication. Normally should be always FALSE.
     'allow_init_new_git' => true, // allow to initialize new local .git repository, if 'git_dir' doesn't exists. (Find 'git_dir' option below.)
@@ -71,16 +72,19 @@ $CONFIG = [
 
     'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
     'git_addr'      => 'git@github.com', // don't change for GitHub
-    'known_hosts'   => ($_SERVER['HOME'] ?? '~').'/.ssh/known_hosts', // location of "known_hosts". Use full path, ~ in '~/.ssh/known_hosts' is not interpreted by PHP. Usually specified path should not be changed. We adding the fingerprint of 'git_host' into the list of known_hosts to avoid confirmation via CLI.
     'remote_name'   => 'origin',
-    'default_branch'=> 'master', // only for test mode. It automatically determinates the branch nage from Git.
+    'default_branch'=> 'master', // only for test mode. It automatically determinates the branch name from Git.
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir'       => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
-    'target_dir'    => '/path/to/published/project', // should point to the root directory of your published project
+    'target_dir'    => '/path/to/published/project', // point the root directory of your published project. IMPORTANT!! Must be writeable for web user! Idealy do `sudo chown [www-data] [target_dir]`.
     'repo_username' => 'YOUR_USERNAME',
     'repo_name'     => 'YOUR_REPOSITORY_NAME',
+
+    // Uncomment the following line if web-user has no home directory and ~/.ssh/[private_key] can't be found.
+    //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
+    'known_hosts'   => __HOME_DIR__.'/.ssh/known_hosts', // location of "known_hosts". Use full path, ~ in '~/.ssh/known_hosts' is not interpreted by PHP. Usually specified path should not be changed. We adding the fingerprint of 'git_host' into the list of known_hosts to avoid confirmation via CLI.
 
     'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 ];
@@ -361,10 +365,20 @@ if (!$current_user) { // It can be still not defined on Apache.
 }
 
 // Bitbucket wants some output immediately. So giving this before starting output buffer...
-print_log("Starting deployment of '$branch' branch into '$CONFIG[target_dir]' as user $current_user...");
+print_log("Starting deployment of `$branch` branch into `$CONFIG[target_dir]` as user `$current_user`...");
 $start_time = microtime(true);
 ob_start(); // to catch all further errors
 try {
+    if (!empty($CONFIG['private_key'])) {
+        putenv('GIT_SSH_COMMAND='
+                  . 'ssh'
+                  . ' -i ' . escapeshellarg($CONFIG['private_key'])
+                  . ' -o UserKnownHostsFile=' . escapeshellarg($CONFIG['known_hosts'])
+                  . ' -o IdentitiesOnly=yes'
+                  . ' -o StrictHostKeyChecking=yes'
+            );
+    }
+
     $git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
     if (!is_dir($git_dir.'/.git')) {
         if ($CONFIG['allow_init_new_git']) {
