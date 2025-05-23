@@ -1,2 +1,5 @@
 *.log
 *.bak
+
+# Some particular use cases, not for sharing
+/cases/
