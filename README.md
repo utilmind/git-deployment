@@ -21,7 +21,7 @@ The good practice is to use code integrity checker, to monitor the code and info
 
 #### IMPORTANT!
 * <b>You never need `sudo` to pull updates from Git.</b> If you think that you need to be a sudoer to use this script – you’re doing something wrong. The web user should _NEVER_ have a super-privileges. Otherwise your web app is critically vulnerable.
-* Do not accidentally publish `/.git` directory. Keep it outside of any `public_html`’s.
+* Do not accidentally publish `/.git` directory for HTTP access. Keep it outside of any `public_html`’s.
 
 #### CONTRIBUTORS to original branch:
 * Please keep PHP7.4+ syntax;
