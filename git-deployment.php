@@ -286,31 +286,36 @@ if (!$CONFIG['is_test']) {
     // Check POSTed data and headers
     switch ($CONFIG['git_host']) {
         case 'github.com':
-            if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
-                print_log("Bad request: no payload or bad payload.\n\$_POST:\n".print_r($_POST, true)."\nHEADERS:\n".print_r($headers, true), 400);
-            }
-
-            $ref = explode('/', $payload['ref']);
-            if (!$branch = end($ref)) {
-                print_log('No branch', 400);
-            }
-
             // Headers
-            if (!isset($headers['x-github-event'])) {
+            if (!$service_event = ($headers['x-github-event'] ?? false)) {
                 print_log('No service event', 400);
             }
-            $is_push = 'push' === $headers['x-github-event'];
+            if ($is_push = 'push' === $service_event) {
+                if (!isset($_POST['payload']) || (!$payload = json_decode($_POST['payload'], true)) || empty($payload['ref'])) {
+                    print_log("Bad request: no payload or bad payload.\n\$_POST:\n".print_r($_POST, true)."\nHEADERS:\n".print_r($headers, true), 400);
+                }
 
+                // Detect branch from Payload on GitHub.
+                $ref = explode('/', $payload['ref']);
+                if (!$branch = end($ref)) {
+                    print_log('No branch', 400);
+                }
+            }
             break;
 
         case 'bitbucket.org': // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
             // Headers
-            if (!isset($headers['x-event-key'])) {
+            if (!$service_event = ($headers['x-event-key'] ?? false)) {
                 print_log('No service event', 400);
             }
-            $is_push = 'repo:push' === $headers['x-event-key'];
-
+            if ($is_push = 'repo:push' === $service_event) {
+                // On BitBucket the branch name can be detected only from input JSON...
+                $detect_branch = true;
+            }
             break;
+
+        default:
+            print_log('Unsupported service.', 400);
     }
 
     if (!$is_push) {
@@ -325,17 +330,24 @@ if (!$CONFIG['is_test']) {
         file_put_contents("$CONFIG[log_path]$this_name-request-input.log", $input);
     }
 
-    // Verify POSTed admin-key (AK: This should be deprecated. Avoid using this.)
-    if (isset($_POST['admin-key']) && ($key = $_POST['admin-key']) && isset($_KEYS['google_api_key'])) {
-        if (!password_verify($_KEYS['google_api_key'], '$2y$'.$key)) {
-            print_log('Bad admin key', 401);
-        }
-
     // Verify signature
-    }elseif ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
+    if ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
                 // Polyfill of hash_equals() for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
                 || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $signature)) {
         print_log('Unauthorized', 401);
+    }
+
+    // Determinate branch by input, if it's not known yet.
+    if (isset($detect_branch)) {
+        $data = json_decode($input, true);
+
+        switch ($CONFIG['git_host']) {
+            case 'bitbucket.org': // 'bitbucket.org' doesn't POST anything. We can determinate branch from php://input
+                if (isset($data['push']['changes'][0]['new']['name'])) {
+                    $branch = $data['push']['changes'][0]['new']['name'];
+                } // otherwise just use default branch
+                break;
+        }
     }
 
 
@@ -445,7 +457,7 @@ try {
     // Consider 'git clean -fd' to remove untracked files.
     //
     // Delete directory
-    exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
+    //exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
 
     // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
     //exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
@@ -488,7 +500,7 @@ try {
 
     // Execute something to increase version in some environment variable
     //exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=")
-    print_log('Cleared some garbage and increased version number.');
+    //print_log('Cleared some garbage and increased version number.');
 
     print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
 
