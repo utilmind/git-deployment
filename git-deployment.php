@@ -102,6 +102,40 @@ header('Content-type: text/plain'); // no HTML-formatting for output
 ob_start(); // to catch all errors
 
 // -- FUNCTIONS --
+/**
+ * Get request headers in a portable way (Apache, Nginx, FPM, CGI).
+ * Returns array with LOWERCASED keys.
+ */
+function get_request_headers_lowercased() {
+    $headers = [];
+
+    // 1) Try getallheaders() if available and returns something
+    if (function_exists('getallheaders')) {
+        $tmp = getallheaders();
+        if (is_array($tmp) && !empty($tmp)) {
+            foreach ($tmp as $k => $v) {
+                $headers[strtolower($k)] = $v;
+            }
+            return $headers;
+        }
+    }
+
+    // 2) Fallback: build from $_SERVER
+    foreach ($_SERVER as $key => $value) {
+        if (strpos($key, 'HTTP_') === 0) {
+            // HTTP_X_GITHUB_EVENT -> x-github-event
+            $name = strtolower(str_replace('_', '-', substr($key, 5)));
+            $headers[$name] = $value;
+        } elseif ($key === 'CONTENT_TYPE') {
+            $headers['content-type'] = $value;
+        } elseif ($key === 'CONTENT_LENGTH') {
+            $headers['content-length'] = $value;
+        }
+    }
+
+    return $headers;
+}
+
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
     Maximum length of returned value is 45 characters.
 
@@ -265,7 +299,7 @@ if (!$CONFIG['is_test']) {
     $log_name = $this_name.'-authentication-error';
 
     // Check HTTP headers
-    $headers = function_exists('getallheaders') ? getallheaders() : []; // getallheaders() doesn't exists if script executed as CLI.
+    $headers = get_request_headers_lowercased();
     if (count($headers)) {
         if ($CONFIG['log_output']) {
             file_put_contents("$CONFIG[log_path]$this_name-request-headers.log",
