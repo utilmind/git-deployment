@@ -109,7 +109,8 @@ ob_start(); // to catch all errors
 function get_request_headers_lowercased() {
     $headers = [];
 
-    // 1) Try getallheaders() if available and returns something
+    // Try getallheaders() if available and returns something
+    // Headers not available if HTTP server (Apache, Nginx+PHP-FPM or some FastCGI) did not parse them. getallheaders() is Apache-only (mod_php).
     if (function_exists('getallheaders')) {
         $tmp = getallheaders();
         if (is_array($tmp) && !empty($tmp)) {
@@ -120,15 +121,17 @@ function get_request_headers_lowercased() {
         }
     }
 
-    // 2) Fallback: build from $_SERVER
+    // Fallback: build from $_SERVER
     foreach ($_SERVER as $key => $value) {
-        if (strpos($key, 'HTTP_') === 0) {
+        if (0 === strpos($key, 'HTTP_')) {
             // HTTP_X_GITHUB_EVENT -> x-github-event
             $name = strtolower(str_replace('_', '-', substr($key, 5)));
             $headers[$name] = $value;
-        } elseif ($key === 'CONTENT_TYPE') {
+
+        }elseif ('CONTENT_TYPE' === $key) {
             $headers['content-type'] = $value;
-        } elseif ($key === 'CONTENT_LENGTH') {
+
+        }elseif ('CONTENT_LENGTH' === $key) {
             $headers['content-length'] = $value;
         }
     }
