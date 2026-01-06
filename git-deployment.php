@@ -74,6 +74,7 @@ $CONFIG = [
     'git_addr'      => 'git@github.com', // don't change for GitHub
     'remote_name'   => 'origin',
     'default_branch'=> 'master', // only for test mode. It automatically determinates the branch name from Git.
+    'allowed_branches' => ['master', 'main'], //, 'staging', 'production'],
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
@@ -118,7 +119,7 @@ function get_ip() {
         $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
 
     }else {
-        $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : false;
+        $ip = $_SERVER['REMOTE_ADDR'] ?? false;
     }
 
     if (!$ip) {
@@ -331,10 +332,23 @@ if (!$CONFIG['is_test']) {
     }
 
     // Verify signature
-    if ((!$signature = $headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '')
-                // Polyfill of hash_equals() for PHP5-. https://stackoverflow.com/questions/27728674/php-call-of-undefined-function-hash-equals
-                || !hash_equals('sha256='.hash_hmac('sha256', $input, $CONFIG['secret']), $signature)) {
-        print_log('Unauthorized', 401);
+    $signature = trim($headers['x-hub-signature-256'] ?? $headers['x-hub-signature'] ?? '');
+    if ('' === $signature) {
+        print_log('Unauthorized: missing signature', 401);
+    }
+
+    // Auto-detect algorithm (although it's 'sha256').
+    if (0 === strpos($signature, 'sha256=')) {
+        $algo = 'sha256';
+    }elseif (0 === strpos($signature, 'sha1=')) {
+        $algo = 'sha1';
+    }else {
+        print_log('Unauthorized: unknown signature algorithm', 401);
+    }
+    $expected = $algo . '=' . hash_hmac($algo, $input, $CONFIG['secret']);
+    
+    if (!hash_equals($expected, $signature)) {
+        print_log('Unauthorized: invalid signature', 401);
     }
 
     // Determinate branch by input, if it's not known yet.
@@ -347,6 +361,12 @@ if (!$CONFIG['is_test']) {
                     $branch = $data['push']['changes'][0]['new']['name'];
                 } // otherwise just use default branch
                 break;
+        }
+
+        if (isset($CONFIG['allowed_branches']) && is_array($CONFIG['allowed_branches'])) {
+            if (!in_array($branch, $CONFIG['allowed_branches'], true)) {
+                print_log('Branch not allowed: ' . $branch, 403);
+            }
         }
     }
 
