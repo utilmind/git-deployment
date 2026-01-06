@@ -50,3 +50,17 @@ The good practice is to use code integrity checker, to monitor the code and info
     ```
 * Always generate SSH key for web user only (e.g. www-data or deamon, depending which username execute scripts in your HTTP server, depending which user executing this deployment script).
 * Your deployment directory must be write-accessible for the web-user.
+
+#### Security
+
+Deployment script can generate log files which are not supposed to be exposed to public. Better point non-public location for logs, or at least hide logs on HTTP-server level.
+For example, you might want to include the following block to your `.htaccess`, if you are using Apache:
+
+```
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Return 404 for .log and .sql
+  RewriteRule \.(log|sql)$ - [R=404,L,NC]
+</IfModule>
+```
