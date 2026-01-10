@@ -556,7 +556,7 @@ try {
     */
 
     // Execute something to increase version in some environment variable
-    //exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=")
+    //exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=");
     //print_log('Cleared some garbage and increased version number.');
 
     print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
