@@ -32,6 +32,8 @@
           No matter, manually or automatically. If this does happen, all further deployments may fail. Then the whole directory with .git branch
           should be removed and redeployed from scratch.
 
+        * Make sure that `proc_open, proc_close, exec` functions are available and not disabled (in `disable_functions` of `php.ini`).
+
     CONTRIBUTORS to original branch:
         * Don't require any other libraries. Use only standard functions.
 
@@ -73,13 +75,23 @@ $CONFIG = [
     'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
     'git_addr'      => 'git@github.com', // don't change for GitHub
     'remote_name'   => 'origin',
-    'default_branch'=> 'master', // only for test mode. It automatically determinates the branch name from Git.
-    'allowed_branches' => ['master', 'main'], //, 'staging', 'production'],
+    'def_branch'    => 'master', // only for test mode. It automatically determinates the branch name from Git.
+    'allowed_branches' => [ // Use allowed branches for security, to not let to allow deployment of garbage branches or branches with garbage names.
+            // If you specify just string(s) with branch names, they will be deployed by path specified in $CONFIG['target_dir']
+            'master',
+            'main',
+     
+            // Specify the exact path for each listed branch, to deploy it by the path other than specified in $CONFIG['def_target_dir'].
+            'staging'   => '/path/to/published/project/main',
+        ], // 'production', 'debug'],
+
+    'def_target_dir'=> '/path/to/published/project', // The exact path to a directory with the published project.
+                                                    // ALL branches specified in "allowed_branches" without individual paths will be deployed into this directory.
+                                                    // IMPORTANT!! Must be writeable for web user! Idealy do `sudo chown [www-data] [target_dir]`.
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir'       => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
-    'target_dir'    => '/path/to/published/project', // point the root directory of your published project. IMPORTANT!! Must be writeable for web user! Idealy do `sudo chown [www-data] [target_dir]`.
     'repo_username' => 'YOUR_USERNAME',
     'repo_name'     => 'YOUR_REPOSITORY_NAME',
 
@@ -101,12 +113,48 @@ set_time_limit(900); // +15 minutes for execution. (Extend later if required!)
 header('Content-type: text/plain'); // no HTML-formatting for output
 ob_start(); // to catch all errors
 
+
 // -- FUNCTIONS --
+/**
+ * Build map: branch => target_dir.
+ *
+ * Supports allowed_branches as:
+ *  - list of strings: ['master', 'beta']  -> deployed into $def_target_dir
+ *  - map of branch => target_dir: ['staging' => '/var/www/sc-staging']
+ *  - mixed.
+ *
+ * Returned value example:
+ *  [
+ *    'master'  => '/var/www/sc',
+ *    'staging' => '/var/www/sc-staging'
+ *  ]
+ */
+function build_branch_targets(array $allowed_branches, string $def_target_dir) { // returns array
+    $targets = [];
+    $def_target_dir = rtrim($def_target_dir, '/');
+
+    foreach ($allowed_branches as $k => $v) {
+        if (is_int($k)) {                 // ['master', 'main] -- to default target directory
+            $branch = trim((string)$v);
+            $dir = $def_target_dir;
+        }else {                           // ['staging' => '/var/www/staging'] -- to individual directory
+            $branch = trim((string)$k);
+            $dir = rtrim((string)$v, '/');
+        }
+
+        if ($branch) {
+            $targets[$branch] = $dir ?: $def_target_dir;
+        }
+    }
+
+    return $targets; // returns array
+}
+
 /**
  * Get request headers in a portable way (Apache, Nginx, FPM, CGI).
  * Returns array with LOWERCASED keys.
  */
-function get_request_headers_lowercased() {
+function get_request_headers_lowercased() { // returns array
     $headers = [];
 
     // Try getallheaders() if available and returns something
@@ -136,7 +184,7 @@ function get_request_headers_lowercased() {
         }
     }
 
-    return $headers;
+    return $headers; // returns array
 }
 
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
@@ -216,11 +264,20 @@ function print_log($msg, $http_exit_code = 0) { // if $http_exit_code specified,
 function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false) {
     print_log('>> '.$command);
 
+    $proc = null; // we use it in `finally`, but it can be uninited if proc_open() fails.
+    $pipes = [];
+
     try { // We could use 'exec($command, $stdout, $result_code);', but we'd like to catch STDERR too.
         $proc = proc_open($command, [
                     1 => ['pipe', 'w'], // STDOUT
                     2 => ['pipe', 'w'], // STDERR
                 ], $pipes);
+
+        if (!is_resource($proc)) {
+            // proc_open failed (disabled, permission, wrong command, etc.)
+            print_log("FATAL: proc_open failed for '$command'.", 500);
+            return 500; // or throw new RuntimeException(...)
+        }
 
         // Reading STDOUT
         $stdout = stream_get_contents($pipes[1]);
@@ -291,7 +348,7 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
 
 // -- GO! --
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
-$branch = $CONFIG['default_branch']; // default, while it's not determined yet.
+$branch = $CONFIG['def_branch']; // default, while it's not determined yet.
 
 if (!is_dir($CONFIG['log_path'])) {
     @mkdir($CONFIG['log_path'], 0775, true);
@@ -401,7 +458,12 @@ if (!$CONFIG['is_test']) {
         }
 
         if (isset($CONFIG['allowed_branches']) && is_array($CONFIG['allowed_branches'])) {
-            if (!in_array($branch, $CONFIG['allowed_branches'], true)) {
+            // Whitelist + (optional) per-branch target directory
+            if (empty($CONFIG['def_target_dir'])) {
+                print_log('Configuration error: `def_target_dir` is empty.', 500);
+            }
+            $branch_targets = build_branch_targets($CONFIG['allowed_branches'], $CONFIG['def_target_dir']);
+            if (!isset($branch_targets[$branch])) {
                 print_log('Branch not allowed: ' . $branch, 403);
             }
         }
@@ -433,8 +495,25 @@ if (!$current_user) { // It can be still not defined on Apache.
     $current_user = $whoami[0];
 }
 
+
+// Resolve target directory for this branch (default or per-branch override).
+// allowed_branches supports both:
+//   - ['master', 'main']                    -> def_target_dir
+//   - ['staging' => '/var/www/sc-staging']  -> custom target
+$target_dir = $CONFIG['def_target_dir'] ?? '';
+if ('' === $target_dir) {
+    print_log('Configuration error: `def_target_dir` is empty.', 500);
+}
+if (isset($CONFIG['allowed_branches']) && is_array($CONFIG['allowed_branches'])) {
+    $branch_targets = build_branch_targets($CONFIG['allowed_branches'], $target_dir);
+    if (isset($branch_targets[$branch])) {
+        $target_dir = $branch_targets[$branch];
+    }
+}
+
+
 // Bitbucket wants some output immediately. So giving this before starting output buffer...
-print_log("Starting deployment of `$branch` branch into `$CONFIG[target_dir]` as user `$current_user`...");
+print_log("Starting deployment of `$branch` branch into `$target_dir` as user `$current_user`...");
 $start_time = microtime(true);
 ob_start(); // to catch all further errors
 try {
@@ -494,9 +573,9 @@ try {
     }
 
     // ...We could PULL updates, but let's better do the "hard reset" to refresh EVERYTHING (if needed), not only updated stuff
-    // $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" pull $CONFIG[remote_name] $branch");
+    // $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[def_target_dir]\" pull $CONFIG[remote_name] $branch");
     // ...Do HARD RESET, to fully synchronize our deployment with Git...
-    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[target_dir]\" reset --hard $CONFIG[remote_name]/$branch");
+    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$target_dir\" reset --hard $CONFIG[remote_name]/$branch");
     // Done
     print_log("'hard reset' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
 
@@ -510,18 +589,18 @@ try {
 
     // REMOVE DEPLOYED GARBAGE
     // =======================
-    // chdir($CONFIG['target_dir']);
+    // chdir($target_dir);
     // Consider 'git clean -fd' to remove untracked files.
     //
     // Delete directory
-    //exec_log("rm -rf $CONFIG[target_dir]/website/DIRECTORY_NAME");
+    //exec_log("rm -rf $target_dir/website/DIRECTORY_NAME");
 
     // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
-    //exec_log("find $CONFIG[target_dir]/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
+    //exec_log("find $target_dir/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
     // Delete README.md and possible .sql files.
-    // exec_log("find $CONFIG[target_dir]/website/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
+    // exec_log("find $target_dir/website/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
     // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
-    //exec_log("find $CONFIG[target_dir]/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+    //exec_log("find $target_dir/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
 
     /*
     function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
@@ -552,11 +631,11 @@ try {
             print_log("Can't open $dir_name");
         }
     }
-    change_dir_permission($CONFIG['target_dir'].'/tools', 'sh', 0755);
+    change_dir_permission($target_dir.'/tools', 'sh', 0755);
     */
 
     // Execute something to increase version in some environment variable
-    //exec_log('php '.__DIR__."/inc_php_var.php $CONFIG[target_dir]/website/.env.php \\\$ext_script_ver v=");
+    //exec_log('php '.__DIR__."/inc_php_var.php $target_dir/website/.env.php \\\$ext_script_ver v=");
     //print_log('Cleared some garbage and increased version number.');
 
     print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
