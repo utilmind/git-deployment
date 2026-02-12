@@ -30,7 +30,7 @@ The good practice is to use code integrity checker, to monitor the code and info
 #### MISCELLANEOUS TIPS:
 * How to generate Access key for Git repository: https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys
   Briefly...
-  
+
   1. Generate key:
     ```
       ssh-keygen -t ed25519 -C "<email@address>" -f <key_file_name>

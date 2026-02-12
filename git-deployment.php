@@ -80,7 +80,7 @@ $CONFIG = [
             // If you specify just string(s) with branch names, they will be deployed by path specified in $CONFIG['target_dir']
             'master',
             'main',
-     
+
             // Specify the exact path for each listed branch, to deploy it by the path other than specified in $CONFIG['def_target_dir'].
             'staging'   => '/path/to/published/project/main',
         ], // 'production', 'debug'],
@@ -440,7 +440,7 @@ if (!$CONFIG['is_test']) {
         print_log('Unauthorized: unknown signature algorithm', 401);
     }
     $expected = $algo . '=' . hash_hmac($algo, $input, $CONFIG['secret']);
-    
+
     if (!hash_equals($expected, $signature)) {
         print_log('Unauthorized: invalid signature', 401);
     }
