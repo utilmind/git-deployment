@@ -74,6 +74,8 @@ $CONFIG = [
 
     'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
     'git_addr'      => 'git@github.com', // don't change for GitHub
+    'repo_username' => 'YOUR_USERNAME',
+    'repo_name'     => 'YOUR_REPOSITORY_NAME',
     'remote_name'   => 'origin',
     'def_branch'    => 'master', // only for test mode. It automatically determinates the branch name from Git.
     'allowed_branches' => [ // Use allowed branches for security, to not let to allow deployment of garbage branches or branches with garbage names.
@@ -92,8 +94,6 @@ $CONFIG = [
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir'       => __HOME_DIR__.'/repo', // + the /branch_name/ will be added automatically to this path
-    'repo_username' => 'YOUR_USERNAME',
-    'repo_name'     => 'YOUR_REPOSITORY_NAME',
 
     // Uncomment the following line if web-user has no home directory and ~/.ssh/[private_key] can't be found.
     //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
