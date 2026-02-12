@@ -456,17 +456,6 @@ if (!$CONFIG['is_test']) {
                 } // otherwise just use default branch
                 break;
         }
-
-        if (isset($CONFIG['allowed_branches']) && is_array($CONFIG['allowed_branches'])) {
-            // Whitelist + (optional) per-branch target directory
-            if (empty($CONFIG['def_target_dir'])) {
-                print_log('Configuration error: `def_target_dir` is empty.', 500);
-            }
-            $branch_targets = build_branch_targets($CONFIG['allowed_branches'], $CONFIG['def_target_dir']);
-            if (!isset($branch_targets[$branch])) {
-                print_log('Branch not allowed: ' . $branch, 403);
-            }
-        }
     }
 
 
@@ -504,6 +493,12 @@ $target_dir = $CONFIG['def_target_dir'] ?? '';
 if ('' === $target_dir) {
     print_log('Configuration error: `def_target_dir` is empty.', 500);
 }
+$branch_targets = build_branch_targets($CONFIG['allowed_branches'] ?? [], $target_dir);
+if (!empty($CONFIG['allowed_branches']) && !isset($branch_targets[$branch])) {
+    print_log('Branch not allowed: ' . $branch, 403);
+}
+$target_dir = $branch_targets[$branch] ?? $target_dir;
+
 if (isset($CONFIG['allowed_branches']) && is_array($CONFIG['allowed_branches'])) {
     $branch_targets = build_branch_targets($CONFIG['allowed_branches'], $target_dir);
     if (isset($branch_targets[$branch])) {
