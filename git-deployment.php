@@ -91,7 +91,7 @@ $CONFIG = [
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
-    'git_dir'       => '/path/to/local/repository', // + the /branch_name/ will be added automatically to this path
+    'git_dir'       => __HOME_DIR__.'/repo', // + the /branch_name/ will be added automatically to this path
     'repo_username' => 'YOUR_USERNAME',
     'repo_name'     => 'YOUR_REPOSITORY_NAME',
 
