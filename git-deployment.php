@@ -326,7 +326,9 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
         print_log("FATAL: failure on '$command'.", 500);
 
     }finally { // supported starting from PHP 5.5. If you can't use it -- just comment out 'finally' line and more proc_close() outside of 'finally'.
-        $result_code = proc_close($proc);
+        $result_code = is_resource($proc)
+            ? proc_close($proc)
+            : 1;
     }
 
     // no sense to output $result_code here, it's always 0 (success) here.
@@ -524,9 +526,11 @@ try {
     }
 
     $git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
-    if (!is_dir($git_dir.'/.git')) {
+    $git_dir_git = $git_dir . '/.git';
+    $git_dir_git_esc = escapeshellarg($git_dir_git);
+    if (!is_dir($git_dir_git)) {
         if ($CONFIG['allow_init_new_git']) {
-            exec_log("git init \"$git_dir\"");
+            exec_log('git init ' . escapeshellarg($git_dir));
 
             /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config (or ~/.ssh/config).
             The typical record looks like follows:
@@ -546,19 +550,19 @@ try {
 
             In some cases you may need just [git_addr], like 'git@github' w/o -[repo_name]. Use exact host as it specified in ssh config.
             */
-            $git_addr  = ($CONFIG['git_addr']     ?? '');
+            $git_addr  = $CONFIG['git_addr']      ?? '';
             $repo_name = $CONFIG['repo_name']     ?? '';
             $repo_user = $CONFIG['repo_username'] ?? '';
             if ($git_addr === '' || $repo_user === '' || $repo_name === '') {
                 print_log("Configuration error: git_addr/repo_username/repo_name must be set. git_addr='$git_addr', repo_username='$repo_user', repo_name='$repo_name'", 500);
             }
 
-            $remote_url = $git_addr . ':' . $repo_user . '/' . $repo_name . '.git';
-            $remote = $CONFIG['remote_name'];
+            $remote_url = escapeshellarg($git_addr . ':' . $repo_user . '/' . $repo_name . '.git');
+            $remote = escapeshellarg($CONFIG['remote_name']);
 
-            $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" remote get-url $remote >/dev/null 2>&1"
-                             . " && git --git-dir=\"$git_dir/.git\" remote set-url $remote " . escapeshellarg($remote_url)
-                             . " || git --git-dir=\"$git_dir/.git\" remote add $remote " . escapeshellarg($remote_url)); // add origin (or whatever 'remote_name')
+            $ret_val = exec_log("git --git-dir=$git_dir_git_esc remote get-url $remote >/dev/null 2>&1"
+                             . " && git --git-dir=$git_dir_git_esc remote set-url $remote $remote_url"
+                             . " || git --git-dir=$git_dir_git_esc remote add $remote $remote_url"); // add origin (or whatever 'remote_name')
 
             // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"... (must be writeable for $current_user!!)
             $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
@@ -567,7 +571,7 @@ try {
                         || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
                 // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
                 // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
-                exec_log("ssh-keyscan $CONFIG[git_host] >> $CONFIG[known_hosts]");
+                exec_log('ssh-keyscan '.escapeshellarg($CONFIG['git_host']).' >> '.escapeshellarg($CONFIG['known_hosts']));
             }
 
         }else {
@@ -578,7 +582,7 @@ try {
 
     // Fetch updates
     // AK 2024-08-07: execution of this command stopped for unknown reason (solved by commenting out ob_start()/ob_end_flush()), but use exec_log(command, TRUE) to debug error stream.
-    $fetch_result = exec_log("git --git-dir=\"$git_dir/.git\" fetch $CONFIG[remote_name]");
+    $fetch_result = exec_log("git --git-dir=$git_dir_git_esc fetch ".escapeshellarg($CONFIG['remote_name']));
     if (0 !== $fetch_result) {
         print_log("Git Fetch failed with exit code $fetch_result.");
         if (128 === $fetch_result) {
