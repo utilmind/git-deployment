@@ -187,6 +187,29 @@ function get_request_headers_lowercased() { // returns array
     return $headers; // returns array
 }
 
+function ensure_known_host(string $host, string $known_hosts_file): void {
+    // Ensure directory exists (best-effort)
+    $dir = dirname($known_hosts_file);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+
+    // Create file if missing (best-effort)
+    if (!file_exists($known_hosts_file)) {
+        @touch($known_hosts_file);
+        @chmod($known_hosts_file, 0644);
+    }
+
+    // Check if host already present (ssh-keygen -F exits 0 if found)
+    $cmd_check = 'ssh-keygen -F ' . escapeshellarg($host) . ' -f ' . escapeshellarg($known_hosts_file) . ' >/dev/null 2>&1';
+    $ret = exec_log($cmd_check);
+
+    if (0 !== $ret) {
+        // Add hashed host entry (-H) to avoid duplicates + reduce exposure of hostnames list.
+        exec_log('ssh-keyscan -H ' . escapeshellarg($host) . ' >> ' . escapeshellarg($known_hosts_file));
+    }
+}
+
 function add_trailing_slash($path) {
     return rtrim($path, '/\\ ') . DIRECTORY_SEPARATOR;
 } // * remove trailing slash with: rtrim($str, '/\\ ');
@@ -565,14 +588,9 @@ try {
                              . " || git --git-dir=$git_dir_git_esc remote add $remote $remote_url"); // add origin (or whatever 'remote_name')
 
             // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"... (must be writeable for $current_user!!)
-            $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
-            if (!file_exists($CONFIG['known_hosts']) // AK: if file exists, but we can't verify this or can't get contents, check 'open_basedir' restrictions.
-                        || (!$file_content = file_get_contents($CONFIG['known_hosts']))
-                        || (false === strpos($file_content, $CONFIG['git_host'].' ssh-rsa'))) { // any string to identify whether fingerprint already included within known_hosts.
-                // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
-                // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
-                exec_log('ssh-keyscan '.escapeshellarg($CONFIG['git_host']).' >> '.escapeshellarg($CONFIG['known_hosts']));
-            }
+            // Add GitHub (or another host for repository) to the list of known_hosts, so it will not ask to confirm fingerprint in CLI.
+            // Read more about auto-confirmation for the fingerprint on https://serverfault.com/questions/447028/non-interactive-git-clone-ssh-fingerprint-prompt
+            ensure_known_host($CONFIG['git_host'], $CONFIG['known_hosts']);
 
         }else {
             print_log("Local .git directory doesn't exist in '$git_dir'. Please initialize local Git repository first, with specifying the remote origin, or allow initialization of new Git in the configuration.", 500);
