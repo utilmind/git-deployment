@@ -620,9 +620,9 @@ try {
 
     // Switch to the correct branch for sure. It will respond something like "Already on 'master'" and this is fine.
     // UPD. We actually don't need this. We don't switch branches, so it's useless.
-    //exec_log("git checkout $branch");
+    //exec_log('git checkout ' . escapeshellarg($branch));
     // Also if we need to set up the branch to work with (could be useful after initial hard reset)
-    //exec_log("git branch --set-upstream-to=$CONFIG[remote_name]/$branch $branch");
+    //exec_log('git branch --set-upstream-to='.escapeshellarg($CONFIG['remote_name'].'/'.$branch).' '.escapeshellarg($branch));
 
 
     // REMOVE DEPLOYED GARBAGE
