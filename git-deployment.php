@@ -529,6 +529,7 @@ if (isset($branch_targets[$branch])) {
 }elseif (!empty($CONFIG['allowed_branches'])) {
     print_log('Branch not allowed: ' . $branch, 403);
 }
+$target_dir_esc = escapeshellarg($target_dir);
 
 
 // Bitbucket wants some output immediately. So giving this before starting output buffer...
@@ -611,9 +612,9 @@ try {
     // ...We could PULL updates, but let's better do the "hard reset" to refresh EVERYTHING (if needed), not only updated stuff
     // $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[def_target_dir]\" pull $CONFIG[remote_name] $branch");
     // ...Do HARD RESET, to fully synchronize our deployment with Git...
-    $ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . ' --work-tree=' . escapeshellarg($target_dir) . ' reset --hard ' . escapeshellarg('origin/' . $branch));
+    $ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . " --work-tree=$target_dir_esc reset --hard " . escapeshellarg('origin/' . $branch));
     // Alternative if --work-tree doesn't works for any reason, e.g. if Permission denied on chdir. Just make $target_dir as current directory then. Although --work-tree considered as more caninical.
-    //$ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . ' -C ' . escapeshellarg($target_dir) . ' reset --hard ' . escapeshellarg('origin/' . $branch));
+    //$ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . " -C $target_dir_esc reset --hard " . escapeshellarg('origin/' . $branch));
     // Done
     print_log("'hard reset' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
 
@@ -631,14 +632,14 @@ try {
     // Consider 'git clean -fd' to remove untracked files.
     //
     // Delete directory
-    //exec_log("rm -rf $target_dir/website/DIRECTORY_NAME");
+    //exec_log("rm -rf $target_dir_esc/website/DIRECTORY_NAME");
 
     // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
-    //exec_log("find $target_dir/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
+    //exec_log("find $target_dir_esc/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
     // Delete README.md and possible .sql files.
-    // exec_log("find $target_dir/website/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
+    exec_log("find $target_dir_esc/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
     // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
-    //exec_log("find $target_dir/website/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+    exec_log("find $target_dir_esc/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
 
     /*
     function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
@@ -669,7 +670,7 @@ try {
             print_log("Can't open $dir_name");
         }
     }
-    change_dir_permission($target_dir.'/tools', 'sh', 0755);
+    change_dir_permission($target_dir_esc.'/tools', 'sh', 0755);
     */
 
     // Execute something to increase version in some environment variable

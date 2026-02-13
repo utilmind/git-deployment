@@ -4,12 +4,12 @@
 # Internal, but feel free to modify it for your needs.
 #
 if (!is_array($argv) || ($i = count($argv)) < 3) {
-    echo <<<END
+    exit(<<<END
 Usage: inc_php_var.php [filename.php] [\$var] [prefix (optionally, can be skipped)]
 Example: inc_php_var.php .credentials.php \$ext_script_ver v=
 
-END;
-    exit;
+END
+    );
 }
 
 if ($content = file_get_contents($argv[1])) {
