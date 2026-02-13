@@ -73,9 +73,9 @@ $CONFIG = [
     'secret'        => '< Your $uper $ekret PaSsPhrase >', // use long passphrases with the mix of alphanumeric and special ASCII characters!
 
     'git_host'      => 'github.com', // don't change if we fetching repo from GitHub. This domain adding to "~/.ssh/known_hosts" on first fetching.
-    'git_addr'      => 'git@github.com', // don't change for GitHub
+    'git_addr'      => 'git@github-REPO_NAME', // Look how exactly the hostname specified for certain key in /etc/ssh/ssh_config (or ~/.ssh/config). Name in config may differ from repository name.
+    'repo_name'     => 'YOUR_REPO_NAME',
     'repo_username' => 'YOUR_USERNAME',
-    'repo_name'     => 'YOUR_REPOSITORY_NAME',
     'remote_name'   => 'origin',
     'def_branch'    => 'master', // only for test mode. It automatically determinates the branch name from Git.
     'allowed_branches' => [ // Use allowed branches for security, to not let to allow deployment of garbage branches or branches with garbage names.
@@ -93,7 +93,7 @@ $CONFIG = [
 
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
-    'git_dir'       => __HOME_DIR__.'/repo', // + the /branch_name/ will be added automatically to this path
+    'git_dir'       => __HOME_DIR__.'/repo/name', // + the /branch_name/ will be added automatically to this path
 
     // Uncomment the following line if web-user has no home directory and ~/.ssh/[private_key] can't be found.
     //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
@@ -186,6 +186,10 @@ function get_request_headers_lowercased() { // returns array
 
     return $headers; // returns array
 }
+
+function add_trailing_slash($path) {
+    return rtrim($path, '/\\ ') . DIRECTORY_SEPARATOR;
+} // * remove trailing slash with: rtrim($str, '/\\ ');
 
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
     Maximum length of returned value is 45 characters.
@@ -350,6 +354,7 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
 $branch = $CONFIG['def_branch']; // default, while it's not determined yet.
 
+$CONFIG['log_path'] = add_trailing_slash($CONFIG['log_path'] ?? __DIR__.'/logs');
 if (!is_dir($CONFIG['log_path'])) {
     @mkdir($CONFIG['log_path'], 0775, true);
 }
@@ -523,17 +528,37 @@ try {
         if ($CONFIG['allow_init_new_git']) {
             exec_log("git init \"$git_dir\"");
 
-            /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config.
+            /* $CONFIG[git_addr]-$CONFIG[repo_name] is the record in your /etc/ssh/ssh_config (or ~/.ssh/config).
             The typical record looks like follows:
 
                     Host bitbucket.org-repository_name
-                    HostName bitbucket.org
-                    IdentityFile ~/.ssh/id_ed25519_avmet
-                    IdentitiesOnly yes
+                        HostName bitbucket.org
+                        IdentityFile ~/.ssh/id_ed25519_keyname
+                        IdentitiesOnly yes
 
-            If you use record different than "[git_addr]-[repo_name]", please update it accordingly. In some cases you may need just [git_addr] w/o -[repo_name].
+                    Host github-repository_name
+                        HostName github.com
+                        User git
+                        IdentityFile /home/deploy/.ssh/keyname-id_ed25519
+                        IdentitiesOnly yes
+                        UserKnownHostsFile /home/deploy/.ssh/known_hosts
+                        StrictHostKeyChecking yes
+
+            In some cases you may need just [git_addr], like 'git@github' w/o -[repo_name]. Use exact host as it specified in ssh config.
             */
-            exec_log("git --git-dir=\"$git_dir/.git\" remote add $CONFIG[remote_name] $CONFIG[git_addr]-$CONFIG[repo_name]:$CONFIG[repo_username]/$CONFIG[repo_name].git"); // add origin (or whatever 'remote_name')
+            $git_addr  = ($CONFIG['git_addr']     ?? '');
+            $repo_name = $CONFIG['repo_name']     ?? '';
+            $repo_user = $CONFIG['repo_username'] ?? '';
+            if ($git_addr === '' || $repo_user === '' || $repo_name === '') {
+                print_log("Configuration error: git_addr/repo_username/repo_name must be set. git_addr='$git_addr', repo_username='$repo_user', repo_name='$repo_name'", 500);
+            }
+
+            $remote_url = $git_addr . ':' . $repo_user . '/' . $repo_name . '.git';
+            $remote = $CONFIG['remote_name'];
+
+            $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" remote get-url $remote >/dev/null 2>&1"
+                             . " && git --git-dir=\"$git_dir/.git\" remote set-url $remote " . escapeshellarg($remote_url)
+                             . " || git --git-dir=\"$git_dir/.git\" remote add $remote " . escapeshellarg($remote_url)); // add origin (or whatever 'remote_name')
 
             // Check, whether 'git_host' already listed in "~/.ssh/known_hosts"... (must be writeable for $current_user!!)
             $CONFIG['known_hosts'] = strtolower($CONFIG['known_hosts']); // just for sure
@@ -564,7 +589,9 @@ try {
     // ...We could PULL updates, but let's better do the "hard reset" to refresh EVERYTHING (if needed), not only updated stuff
     // $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$CONFIG[def_target_dir]\" pull $CONFIG[remote_name] $branch");
     // ...Do HARD RESET, to fully synchronize our deployment with Git...
-    $ret_val = exec_log("git --git-dir=\"$git_dir/.git\" --work-tree=\"$target_dir\" reset --hard $CONFIG[remote_name]/$branch");
+    $ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . ' --work-tree=' . escapeshellarg($target_dir) . ' reset --hard ' . escapeshellarg('origin/' . $branch));
+    // Alternative if --work-tree doesn't works for any reason, e.g. if Permission denied on chdir. Just make $target_dir as current directory then. Although --work-tree considered as more caninical.
+    //$ret_val = exec_log('git --git-dir=' . escapeshellarg($git_dir . '/.git') . ' -C ' . escapeshellarg($target_dir) . ' reset --hard ' . escapeshellarg('origin/' . $branch));
     // Done
     print_log("'hard reset' finished with code $ret_val in ".number_format(microtime(1) - $start_time, 3).' seconds.'); // $ret_val 0 is good!
 
@@ -626,6 +653,10 @@ try {
     // Execute something to increase version in some environment variable
     //exec_log('php '.__DIR__."/inc_php_var.php $target_dir/website/.env.php \\\$ext_script_ver v=");
     //print_log('Cleared some garbage and increased version number.');
+
+    //if ('master' === $branch && empty($_POST['admin-key'])) { // if this is not manual re-deployment
+        // ... send notification to Telegram or Slack or email.
+    //}
 
     print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
 
