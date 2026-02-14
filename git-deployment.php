@@ -113,7 +113,8 @@ $CONFIG = [
         '.src.js',
         '.src.css',
         '.map',
-        //'.log', // better block the possibility to download logs and extensions above with your HTTP server configuration.
+        '.log', // Be careful with logs. They are useful, but only when kept outside of the 'public_html`.
+                // However block the possibility to download logs and extensions above with your HTTP server configuration.
     ],
     // Directories (relative to $target_dir) where forbidden suffixes will be searched and removed.
     // Use [''] to scan the whole target directory.
