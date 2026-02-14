@@ -99,6 +99,23 @@ $CONFIG = [
     //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
     'known_hosts'   => __HOME_DIR__.'/.ssh/known_hosts', // location of "known_hosts". Use full path, ~ in '~/.ssh/known_hosts' is not interpreted by PHP. Usually specified path should not be changed. We adding the fingerprint of 'git_host' into the list of known_hosts to avoid confirmation via CLI.
 
+    // --- Deployment lock (prevents integrity checker false positives during deploy/cleanup)
+    'deploy_lock_name' => '.deploy.lock', // file name inside $target_dir
+
+    // --- Post-deploy cleanup: remove files by suffix (glob-style), e.g. '.src.js' => removes '*.src.js'
+    // IMPORTANT: keep this list strict; these files will be deleted from the deployed tree after each deploy.
+    'forbidden_file_suffixes' => [
+        '.bat',
+        '.bak',
+        '.src.js',
+        '.src.css',
+        '.map',
+    ],
+    // Directories (relative to $target_dir) where forbidden suffixes will be searched and removed.
+    // Use [''] to scan the whole target directory.
+    'forbidden_scan_dirs' => ['www'],
+
+
     'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 ];
 
@@ -115,6 +132,18 @@ ob_start(); // to catch all errors
 
 
 // -- FUNCTIONS --
+function strip_leading_slash($path) {
+    return ($path, '/\\ ');
+}
+
+function strip_trailing_slash($path) {
+    return rtrim($path, '/\\ ');
+}
+
+function add_trailing_slash($path) {
+    return strip_trailing_slash($path) . DIRECTORY_SEPARATOR;
+} // * remove trailing slash with: rtrim($str, '/\\ ');
+
 /**
  * Build map: branch => target_dir.
  *
@@ -131,7 +160,7 @@ ob_start(); // to catch all errors
  */
 function build_branch_targets(array $allowed_branches, string $def_target_dir) { // returns array
     $targets = [];
-    $def_target_dir = rtrim($def_target_dir, '/');
+    $def_target_dir = strip_trailing_slash($def_target_dir);
 
     foreach ($allowed_branches as $k => $v) {
         if (is_int($k)) {                 // ['master', 'main] -- to default target directory
@@ -139,7 +168,7 @@ function build_branch_targets(array $allowed_branches, string $def_target_dir) {
             $dir = $def_target_dir;
         }else {                           // ['staging' => '/var/www/staging'] -- to individual directory
             $branch = trim((string)$k);
-            $dir = rtrim((string)$v, '/');
+            $dir = strip_trailing_slash((string)$v);
         }
 
         if ($branch) {
@@ -209,10 +238,6 @@ function ensure_known_host(string $host, string $known_hosts_file): void {
         exec_log('ssh-keyscan -H ' . escapeshellarg($host) . ' >> ' . escapeshellarg($known_hosts_file));
     }
 }
-
-function add_trailing_slash($path) {
-    return rtrim($path, '/\\ ') . DIRECTORY_SEPARATOR;
-} // * remove trailing slash with: rtrim($str, '/\\ ');
 
 /*  Returns string representation of IP. It can either IPv6 OR IPv4 format.
     Maximum length of returned value is 45 characters.
@@ -531,6 +556,30 @@ if (isset($branch_targets[$branch])) {
 }
 $target_dir_esc = escapeshellarg($target_dir);
 
+$deploy_lock_fn = add_trailing_slash($target_dir).($CONFIG['deploy_lock_name'] ?? '.deploy.lock');
+$deploy_lock_created = false;
+
+// Prevent concurrent deployments (and avoid false positives in integrity checker during deploy/cleanup).
+if (is_file($deploy_lock_fn)) {
+    $age = @filemtime($deploy_lock_fn) ? (time() - filemtime($deploy_lock_fn)) : null;
+    $age_str = (null === $age) ? 'unknown' : ($age.' sec');
+    print_log("Deployment lock already exists: `$deploy_lock_fn` (age: $age_str). Aborting this deploy.", 423);
+}
+
+// Create lock file as early as possible.
+$lock_payload = [
+    'created_at' => date('c'),
+    'user'       => $current_user,
+    'branch'     => $branch,
+    'remote'     => $CONFIG['remote_name'] ?? '',
+    'ip'         => $_SERVER['REMOTE_ADDR'] ?? '',
+    'ua'         => $_SERVER['HTTP_USER_AGENT'] ?? '',
+];
+if (false === @file_put_contents($deploy_lock_fn, json_encode($lock_payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX)) {
+    print_log("Can't create deployment lock: `$deploy_lock_fn` (check permissions).", 500);
+}
+$deploy_lock_created = true;
+
 
 // Bitbucket wants some output immediately. So giving this before starting output buffer...
 print_log("Starting deployment of `$branch` branch into `$target_dir` as user `$current_user`...");
@@ -549,7 +598,7 @@ try {
             );
     }
 
-    $git_dir = rtrim($CONFIG['git_dir'], '/').'/'.$branch;
+    $git_dir = add_trailing_slash($CONFIG['git_dir']).$branch;
     $git_dir_git = $git_dir . '/.git';
     $git_dir_git_esc = escapeshellarg($git_dir_git);
     if (!is_dir($git_dir_git)) {
@@ -637,9 +686,51 @@ try {
     // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
     //exec_log("find $target_dir_esc/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
     // Delete README.md and possible .sql files.
-    exec_log("find $target_dir_esc/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
+    //exec_log("find $target_dir_esc/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
     // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
-    exec_log("find $target_dir_esc/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+    //exec_log("find $target_dir_esc/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+
+    // Delete forbidden files by configured suffixes.
+    // ==============================================
+    // Example suffix: '.src.js' will delete '*.src.js'.
+    $suffixes = $CONFIG['forbidden_file_suffixes'] ?? null;
+    if (!empty($suffixes) && is_array($suffixes)) {
+        $safe_suffixes = [];
+        foreach ($suffixes as $suf) {
+            $suf = trim((string)$suf);
+            if ('' === $suf) {
+                continue;
+            }
+            // Safety: allow only simple suffixes like '.src.js', '.bak', '.map'.
+            if (!preg_match('/^[A-Za-z0-9._-]+$/', $suf)) {
+                print_log("Skipping unsafe forbidden suffix: $suf");
+                continue;
+            }
+            $safe_suffixes[] = $suf;
+        }
+        $safe_suffixes = array_values(array_unique($safe_suffixes));
+
+        if ($safe_suffixes) {
+            $scan_dirs = $CONFIG['forbidden_scan_dirs'] ?? ['www'];
+
+            foreach ($scan_dirs as $rel_dir) {
+                $rel_dir = trim((string)$rel_dir);
+                $dir = strip_trailing_slash($target_dir);
+                if ('' !== $rel_dir) {
+                    $dir .= DIRECTORY_SEPARATOR . strip_leading_slash($rel_dir);
+                }
+
+                $dir_esc = escapeshellarg($dir);
+                $expr = [];
+                foreach ($safe_suffixes as $suf) {
+                    $expr[] = '-name '.escapeshellarg('*'.$suf);
+                }
+                $names = '\( '.implode(' -o ', $expr).' \)';
+
+                exec_log("find $dir_esc $names -type f -exec rm -f {} \\;");
+            }
+        }
+    }
 
     /*
     function change_dir_permission(string $dir_name, string $file_ext, int $permission): void {
@@ -684,6 +775,14 @@ try {
     print_log('Done in '.number_format(microtime(true) - $start_time, 3).' sec.', 200); // exit with "200 OK".
 
 }finally {
+    // Always remove deploy lock (even if deploy failed)
+    if (!empty($deploy_lock_created)
+            && $deploy_lock_created
+            && !empty($deploy_lock_fn)
+            && is_file($deploy_lock_fn)) {
+        @unlink($deploy_lock_fn);
+    }
+
     // get all stdout to write into log
     $out = ob_get_contents();
     ob_end_clean();
