@@ -94,7 +94,7 @@ $CONFIG = [
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir'       => __HOME_DIR__.'/repo/name', // + the /branch_name/ will be added automatically to this path
-    'log_dir'       => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
+    'log_dir'       => __HOME_DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 
     // Uncomment the following line if web-user has no home directory and ~/.ssh/[private_key] can't be found.
     //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
