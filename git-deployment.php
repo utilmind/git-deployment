@@ -94,6 +94,7 @@ $CONFIG = [
     // You will need to set up write permission for the following directories.
     // Get web username with $_SERVER['LOGNAME'] ?? $_SERVER['USER'] ?? $_SERVER['USERNAME']; // (from $_SERVER['USER'] on Ubuntu/Nginx).
     'git_dir'       => __HOME_DIR__.'/repo/name', // + the /branch_name/ will be added automatically to this path
+    'log_dir'       => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 
     // Uncomment the following line if web-user has no home directory and ~/.ssh/[private_key] can't be found.
     //'private_key'   => __HOME_DIR__.'/.ssh/private_key_file_name',
@@ -120,9 +121,6 @@ $CONFIG = [
     // Directories (relative to $target_dir) where forbidden suffixes will be searched and removed.
     // Use [''] to scan the whole target directory.
     'forbidden_scan_dirs' => ['www'], // 'www' or 'public_html', any public directory
-
-
-    'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
 ];
 
 
@@ -302,7 +300,7 @@ function print_log($msg, $http_exit_code = 0) { // if $http_exit_code specified,
             $log .= "\n"; // one more line separator in log
         }
 
-        file_put_contents("$CONFIG[log_path]$log_name.log", $log, FILE_APPEND);
+        file_put_contents("$CONFIG[log_dir]$log_name.log", $log, FILE_APPEND);
     }
 
     // Terminate if any $http_exit_code specified.
@@ -410,9 +408,9 @@ function exec_log($command, $ignore_empty_stdout = false, $debug_stderr = false)
 $this_name = preg_replace('/\\.[^.\\s]{3,4}$/', '', basename($_SERVER['PHP_SELF']));
 $branch = $CONFIG['def_branch']; // default, while it's not determined yet.
 
-$CONFIG['log_path'] = add_trailing_slash($CONFIG['log_path'] ?? __DIR__.'/logs');
-if (!is_dir($CONFIG['log_path'])) {
-    @mkdir($CONFIG['log_path'], 0775, true);
+$CONFIG['log_dir'] = add_trailing_slash($CONFIG['log_dir'] ?? __DIR__.'/logs');
+if (!is_dir($CONFIG['log_dir'])) {
+    @mkdir($CONFIG['log_dir'], 0775, true);
 }
 
 // VALIDATION... (We don't want to give any output before request validated. Except errors, of course.)
@@ -423,7 +421,7 @@ if (!$CONFIG['is_test']) {
     $headers = get_request_headers_lowercased();
     if (count($headers)) {
         if ($CONFIG['log_output']) {
-            file_put_contents("$CONFIG[log_path]$this_name-request-headers.log",
+            file_put_contents("$CONFIG[log_dir]$this_name-request-headers.log",
                     print_r($headers, true)
                         // if have POSTed payload (e.g. from GitHub)
                         . (isset($payload)
@@ -483,7 +481,7 @@ if (!$CONFIG['is_test']) {
     }
 
     if ($CONFIG['log_output']) {
-        file_put_contents("$CONFIG[log_path]$this_name-request-input.log", $input);
+        file_put_contents("$CONFIG[log_dir]$this_name-request-input.log", $input);
     }
 
     // Verify signature
@@ -792,5 +790,5 @@ try {
     ob_end_clean();
     echo $out;
 
-    file_put_contents("$CONFIG[log_path]$log_name-stdout.log", $out);
+    file_put_contents("$CONFIG[log_dir]$log_name-stdout.log", $out);
 }
