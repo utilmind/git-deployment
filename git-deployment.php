@@ -689,12 +689,10 @@ try {
     // Delete directory
     //exec_log("rm -rf $target_dir_esc/website/DIRECTORY_NAME");
 
-    // Delete .htaccess in target_dir and all subdirectories. (We may use .htaccess in local environement, but don't need it on production Nginx droplet.)
+    // Delete .htaccess in target_dir and all subdirectories if you're running Nginx server. (We may use .htaccess in local environement, but don't need .htaccess on production Nginx.)
     //exec_log("find $target_dir_esc/website/ -type f -name \".htaccess\" -exec rm -f {} \\;");
-    // Delete README.md and possible .sql files.
-    //exec_log("find $target_dir_esc/ \\( -name \"*.md\" -o -name \"*.sql\" \\) -type f -exec rm -f {} \\;");
-    // Delete all Windows batch files AND backup files. Plus .src.js and .src.css.
-    //exec_log("find $target_dir_esc/www/ \\( -name \"*.bat\" -o -name \"*.bak\" -o -name \"*.src.js\" -o -name \"*.src.css\" \\) -type f -exec rm -f {} \\;");
+    // Delete README.md and possible .sql files. But better use 'forbidden_file_suffixes' configuration.
+    //exec_log('find ' . escapeshellarg($target_dir . '/') . " \\( -name '*.md' -o -name '*.sql' \\) -type f -exec rm -f {} \\;");
 
     // Delete forbidden files by configured suffixes.
     // ==============================================
