@@ -105,15 +105,19 @@ $CONFIG = [
     // --- Post-deploy cleanup: remove files by suffix (glob-style), e.g. '.src.js' => removes '*.src.js'
     // IMPORTANT: keep this list strict; these files will be deleted from the deployed tree after each deploy.
     'forbidden_file_suffixes' => [
+        '.md',
+        '.sql',
         '.bat',
+        '.sh',
         '.bak',
         '.src.js',
         '.src.css',
         '.map',
+        //'.log', // better block the possibility to download logs and extensions above with your HTTP server configuration.
     ],
     // Directories (relative to $target_dir) where forbidden suffixes will be searched and removed.
     // Use [''] to scan the whole target directory.
-    'forbidden_scan_dirs' => ['www'],
+    'forbidden_scan_dirs' => ['www'], // 'www' or 'public_html', any public directory
 
 
     'log_path'      => __DIR__.'/logs/', // must have trailing /. Make sure that it's writeable for the web user (e.g. www-data, daemon)
