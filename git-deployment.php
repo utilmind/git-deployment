@@ -115,6 +115,7 @@ $CONFIG = [
         '.map',
         '.log', // Be careful with logs. They are useful, but only when kept outside of the 'public_html`.
                 // However block the possibility to download logs and extensions above with your HTTP server configuration.
+                // Don't remove .txt files if you don't want to remove your 'robots.txt'.
     ],
     // Directories (relative to $target_dir) where forbidden suffixes will be searched and removed.
     // Use [''] to scan the whole target directory.
